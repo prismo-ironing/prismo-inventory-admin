@@ -400,6 +400,8 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
           child: DataTable(
             headingRowColor: WidgetStateProperty.all(Colors.grey.shade100),
             columnSpacing: 24,
+            dataRowMinHeight: 48,
+            dataRowMaxHeight: 56,
             columns: const [
               DataColumn(label: Text('Medicine')),
               DataColumn(label: Text('Category')),
@@ -417,36 +419,16 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
               return DataRow(
                 cells: [
                   DataCell(
-                    SizedBox(
-                      width: 250,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            item.brandName,
-                            style: GoogleFonts.inter(fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (item.genericName != null)
-                            Text(
-                              item.genericName!,
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          if (item.composition != null)
-                            Text(
-                              item.composition!,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: Colors.grey.shade500,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
+                    Tooltip(
+                      message: '${item.brandName}\n${item.genericName ?? ""}\n${item.composition ?? ""}',
+                      child: SizedBox(
+                        width: 220,
+                        child: Text(
+                          item.brandName,
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                        ),
                       ),
                     ),
                   ),

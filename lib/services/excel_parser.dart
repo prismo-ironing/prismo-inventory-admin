@@ -151,12 +151,14 @@ class ExcelParser {
     final cell = row[index];
     if (cell?.value == null) return null;
     
-    final value = cell!.value;
-    if (value is int) return value;
-    if (value is double) return value.toInt();
-    
-    final strValue = value.toString().trim();
+    // CellValue in excel 4.x wraps the actual value
+    final cellValue = cell!.value;
+    final strValue = cellValue.toString().trim();
     if (strValue.isEmpty) return null;
+    
+    // Try parsing as double first (handles "150.0" etc), then convert to int
+    final doubleVal = double.tryParse(strValue);
+    if (doubleVal != null) return doubleVal.toInt();
     
     return int.tryParse(strValue);
   }
@@ -167,11 +169,9 @@ class ExcelParser {
     final cell = row[index];
     if (cell?.value == null) return null;
     
-    final value = cell!.value;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    
-    final strValue = value.toString().trim();
+    // CellValue in excel 4.x wraps the actual value
+    final cellValue = cell!.value;
+    final strValue = cellValue.toString().trim();
     if (strValue.isEmpty) return null;
     
     return double.tryParse(strValue);
