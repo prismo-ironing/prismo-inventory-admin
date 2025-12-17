@@ -340,6 +340,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const SizedBox(height: 16),
         Card(
+          clipBehavior: Clip.antiAlias,
           child: _stores.isEmpty
               ? Container(
                   padding: const EdgeInsets.all(48),
@@ -359,72 +360,166 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _stores.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final store = _stores[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: store.isActive
-                            ? const Color(0xFF4CAF50).withOpacity(0.1)
-                            : Colors.grey.shade200,
-                        child: Icon(
-                          Icons.store,
-                          color: store.isActive ? const Color(0xFF4CAF50) : Colors.grey,
+              : Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Table(
+                    columnWidths: const {
+                      0: FlexColumnWidth(3), // Store - takes more space
+                      1: FixedColumnWidth(80), // Status
+                      2: FixedColumnWidth(70), // Total
+                      3: FixedColumnWidth(70), // Active
+                      4: FixedColumnWidth(70), // Expired
+                      5: FixedColumnWidth(90), // Low Stock
+                      6: FixedColumnWidth(100), // Actions
+                    },
+                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                    children: [
+                      // Header Row
+                      TableRow(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
                         ),
-                      ),
-                      title: Text(
-                        store.name,
-                        style: GoogleFonts.inter(fontWeight: FontWeight.w500),
-                      ),
-                      subtitle: Text(
-                        store.address ?? store.id,
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: store.isActive
-                                  ? const Color(0xFF4CAF50).withOpacity(0.1)
-                                  : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(12),
+                          _tableHeader('Store'),
+                          _tableHeader('Status'),
+                          _tableHeader('Total', center: true),
+                          _tableHeader('Active', center: true),
+                          _tableHeader('Expired', center: true),
+                          _tableHeader('Low Stock', center: true),
+                          _tableHeader('Actions', center: true),
+                        ],
+                      ),
+                      // Data Rows
+                      ..._stores.map((store) => TableRow(
+                        decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                        ),
+                        children: [
+                          // Store cell
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: store.isActive
+                                      ? const Color(0xFF4CAF50).withOpacity(0.1)
+                                      : Colors.grey.shade200,
+                                  child: Icon(
+                                    Icons.store,
+                                    size: 18,
+                                    color: store.isActive ? const Color(0xFF4CAF50) : Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(store.name, style: GoogleFonts.inter(fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+                                      Text(
+                                        store.address ?? store.id,
+                                        style: GoogleFonts.inter(fontSize: 11, color: Colors.grey.shade600),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            child: Text(
-                              store.isActive ? 'Active' : 'Inactive',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: store.isActive ? const Color(0xFF4CAF50) : Colors.grey,
+                          ),
+                          // Status cell
+                          Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: store.isActive
+                                    ? const Color(0xFF4CAF50).withOpacity(0.1)
+                                    : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                store.isActive ? 'Active' : 'Inactive',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: store.isActive ? const Color(0xFF4CAF50) : Colors.grey,
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(Icons.upload_file, size: 20),
-                            onPressed: () => _navigateToUpload(preselectedStore: store),
-                            tooltip: 'Upload Inventory',
+                          // Total cell
+                          Center(
+                            child: Text(
+                              '${store.totalMedicines}',
+                              style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF1A1A2E)),
+                            ),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.visibility, size: 20),
-                            onPressed: () => _navigateToInventoryView(store),
-                            tooltip: 'View Inventory',
+                          // Active cell
+                          Center(
+                            child: Text(
+                              '${store.activeMedicines}',
+                              style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF4CAF50)),
+                            ),
+                          ),
+                          // Expired cell
+                          Center(
+                            child: Text(
+                              '${store.expiredMedicines}',
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w600,
+                                color: store.expiredMedicines > 0 ? Colors.red : Colors.grey,
+                              ),
+                            ),
+                          ),
+                          // Low Stock cell
+                          Center(
+                            child: Text(
+                              '${store.lowStock}',
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w600,
+                                color: store.lowStock > 0 ? Colors.orange : Colors.grey,
+                              ),
+                            ),
+                          ),
+                          // Actions cell
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.upload_file, size: 20),
+                                onPressed: () => _navigateToUpload(preselectedStore: store),
+                                tooltip: 'Upload Inventory',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.visibility, size: 20),
+                                onPressed: () => _navigateToInventoryView(store),
+                                tooltip: 'View Inventory',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
                           ),
                         ],
-                      ),
-                    );
-                  },
+                      )),
+                    ],
+                  ),
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _tableHeader(String text, {bool center = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      child: center
+          ? Center(child: Text(text, style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13)))
+          : Text(text, style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13)),
     );
   }
 

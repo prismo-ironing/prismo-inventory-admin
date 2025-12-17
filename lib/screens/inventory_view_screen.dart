@@ -66,10 +66,14 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
 
       // Status filter
       if (_filterStatus != 'all') {
-        if (_filterStatus == 'in_stock' && item.stockQuantity <= 0) return false;
+        final isExpired = _isExpired(item.expiryDate);
+        
+        if (_filterStatus == 'in_stock' && (item.stockQuantity <= 0 || isExpired)) return false;
         if (_filterStatus == 'low_stock' && 
             (item.stockQuantity > 10 || item.stockQuantity <= 0)) return false;
         if (_filterStatus == 'out_of_stock' && item.stockQuantity > 0) return false;
+        if (_filterStatus == 'expired' && !isExpired) return false;
+        if (_filterStatus == 'active' && (item.stockQuantity <= 0 || isExpired)) return false;
       }
 
       return true;
@@ -300,9 +304,11 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
               ),
               items: const [
                 DropdownMenuItem(value: 'all', child: Text('All')),
+                DropdownMenuItem(value: 'active', child: Text('Active')),
                 DropdownMenuItem(value: 'in_stock', child: Text('In Stock')),
                 DropdownMenuItem(value: 'low_stock', child: Text('Low Stock')),
                 DropdownMenuItem(value: 'out_of_stock', child: Text('Out of Stock')),
+                DropdownMenuItem(value: 'expired', child: Text('Expired')),
               ],
               onChanged: (value) {
                 setState(() {
@@ -412,6 +418,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
               DataColumn(label: Text('Selling Price'), numeric: true),
               DataColumn(label: Text('Stock'), numeric: true),
               DataColumn(label: Text('Status')),
+              DataColumn(label: Text('Expiry')),
               DataColumn(label: Text('Last Updated')),
               DataColumn(label: Text('Actions')),
             ],
@@ -448,6 +455,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
                     ),
                   ),
                   DataCell(_buildStatusBadge(item.availabilityStatus)),
+                  DataCell(_buildExpiryCell(item.expiryDate)),
                   DataCell(
                     Text(
                       _formatDate(item.lastUpdatedAt),
@@ -514,6 +522,61 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
         style: GoogleFonts.inter(
           fontSize: 11,
           fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  bool _isExpired(String? expiryDateStr) {
+    if (expiryDateStr == null) return false;
+    try {
+      final expiryDate = DateTime.parse(expiryDateStr);
+      return expiryDate.isBefore(DateTime.now());
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Widget _buildExpiryCell(String? expiryDateStr) {
+    if (expiryDateStr == null) {
+      return Text('-', style: GoogleFonts.inter(fontSize: 12, color: Colors.grey));
+    }
+    
+    DateTime? expiryDate;
+    try {
+      expiryDate = DateTime.parse(expiryDateStr);
+    } catch (e) {
+      return Text(expiryDateStr, style: GoogleFonts.inter(fontSize: 12, color: Colors.grey));
+    }
+    
+    final now = DateTime.now();
+    final isExpired = expiryDate.isBefore(now);
+    final daysUntilExpiry = expiryDate.difference(now).inDays;
+    final isExpiringSoon = !isExpired && daysUntilExpiry <= 30;
+    
+    Color color;
+    if (isExpired) {
+      color = const Color(0xFFF44336); // Red
+    } else if (isExpiringSoon) {
+      color = const Color(0xFFFF9800); // Orange
+    } else {
+      color = const Color(0xFF4CAF50); // Green
+    }
+    
+    final dateStr = '${expiryDate.day}/${expiryDate.month}/${expiryDate.year}';
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        isExpired ? '$dateStr (Expired)' : dateStr,
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
           color: color,
         ),
       ),

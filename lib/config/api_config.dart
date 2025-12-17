@@ -1,6 +1,15 @@
 class ApiConfig {
-  // Change this to your backend URL
-  static const String baseUrl = 'http://localhost:8081/api';
+  // Environment toggle - set to false for production
+  static const bool _isDevelopment = false;
+  
+  // Development URL (localhost)
+  static const String _devBaseUrl = 'http://localhost:8081/api';
+  
+  // Production URL (GCP Cloud Run)
+  static const String _prodBaseUrl = 'https://prismo-service-184530546940.us-central1.run.app/api';
+  
+  // Active base URL
+  static String get baseUrl => _isDevelopment ? _devBaseUrl : _prodBaseUrl;
   
   // Admin endpoints
   static String get adminInventoryUrl => '$baseUrl/admin/inventory';

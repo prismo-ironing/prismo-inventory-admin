@@ -81,12 +81,22 @@ class Store {
   final String name;
   final String? address;
   final bool isActive;
+  final int totalMedicines;
+  final int activeMedicines;
+  final int expiredMedicines;
+  final int lowStock;
+  final int outOfStock;
 
   Store({
     required this.id,
     required this.name,
     this.address,
     this.isActive = true,
+    this.totalMedicines = 0,
+    this.activeMedicines = 0,
+    this.expiredMedicines = 0,
+    this.lowStock = 0,
+    this.outOfStock = 0,
   });
 
   factory Store.fromJson(Map<String, dynamic> json) {
@@ -95,6 +105,11 @@ class Store {
       name: json['name'] as String,
       address: json['address'] as String?,
       isActive: json['isActive'] as bool? ?? true,
+      totalMedicines: json['totalMedicines'] as int? ?? 0,
+      activeMedicines: json['activeMedicines'] as int? ?? 0,
+      expiredMedicines: json['expiredMedicines'] as int? ?? 0,
+      lowStock: json['lowStock'] as int? ?? 0,
+      outOfStock: json['outOfStock'] as int? ?? 0,
     );
   }
 }
