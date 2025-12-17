@@ -80,57 +80,89 @@ class InventoryService {
     }
   }
 
-  /// Upload inventory from parsed Excel data
-  static Future<UploadResponse> uploadInventory(String storeId, List<InventoryItem> items) async {
-    try {
-      final requestBody = json.encode({
-        'storeId': storeId,
-        'items': items.map((i) => i.toJson()).toList(),
-      });
+  /// Upload inventory from parsed Excel/CSV data with batching for large files
+  /// [onProgress] callback receives (completed, total, currentBatch, totalBatches)
+  static Future<UploadResponse> uploadInventory(
+    String storeId, 
+    List<InventoryItem> items, {
+    void Function(int completed, int total, int currentBatch, int totalBatches)? onProgress,
+  }) async {
+    const int batchSize = 500; // Upload 500 items at a time
+    final int totalItems = items.length;
+    final int totalBatches = (totalItems / batchSize).ceil();
+    
+    print('Uploading $totalItems items in $totalBatches batches to store $storeId');
+    
+    // Aggregate results across batches
+    int newMedicinesAdded = 0;
+    int existingMedicinesUpdated = 0;
+    int inventoryItemsCreated = 0;
+    int inventoryItemsUpdated = 0;
+    int failedItems = 0;
+    List<UploadError> allErrors = [];
+    
+    for (int batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      final int start = batchIndex * batchSize;
+      final int end = (start + batchSize > totalItems) ? totalItems : start + batchSize;
+      final batch = items.sublist(start, end);
+      
+      print('Uploading batch ${batchIndex + 1}/$totalBatches (items $start-$end)');
+      onProgress?.call(start, totalItems, batchIndex + 1, totalBatches);
+      
+      try {
+        final requestBody = json.encode({
+          'storeId': storeId,
+          'items': batch.map((i) => i.toJson()).toList(),
+        });
 
-      print('Uploading ${items.length} items to store $storeId');
+        final response = await http
+            .post(
+              Uri.parse(ApiConfig.uploadUrl),
+              headers: {'Content-Type': 'application/json'},
+              body: requestBody,
+            )
+            .timeout(const Duration(seconds: 120)); // 2 min timeout per batch
 
-      final response = await http
-          .post(
-            Uri.parse(ApiConfig.uploadUrl),
-            headers: {'Content-Type': 'application/json'},
-            body: requestBody,
-          )
-          .timeout(const Duration(seconds: 60));
-
-      print('Upload response: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return UploadResponse.fromJson(data);
-      } else {
-        final data = json.decode(response.body);
-        return UploadResponse(
-          success: false,
-          message: data['error'] ?? 'Upload failed with status ${response.statusCode}',
-          totalItems: 0,
-          newMedicinesAdded: 0,
-          existingMedicinesUpdated: 0,
-          inventoryItemsCreated: 0,
-          inventoryItemsUpdated: 0,
-          failedItems: items.length,
-          errors: [],
-        );
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          newMedicinesAdded += (data['newMedicinesAdded'] as int? ?? 0);
+          existingMedicinesUpdated += (data['existingMedicinesUpdated'] as int? ?? 0);
+          inventoryItemsCreated += (data['inventoryItemsCreated'] as int? ?? 0);
+          inventoryItemsUpdated += (data['inventoryItemsUpdated'] as int? ?? 0);
+          failedItems += (data['failedItems'] as int? ?? 0);
+          if (data['errors'] != null) {
+            final errors = (data['errors'] as List)
+                .map((e) => UploadError.fromJson(e as Map<String, dynamic>))
+                .toList();
+            allErrors.addAll(errors);
+          }
+          print('Batch ${batchIndex + 1} completed successfully');
+        } else {
+          print('Batch ${batchIndex + 1} failed: ${response.statusCode}');
+          failedItems += batch.length;
+        }
+      } catch (e) {
+        print('Error uploading batch ${batchIndex + 1}: $e');
+        failedItems += batch.length;
+        allErrors.add(UploadError(
+          errorMessage: 'Batch ${batchIndex + 1} failed: $e',
+        ));
       }
-    } catch (e) {
-      print('Error uploading inventory: $e');
-      return UploadResponse(
-        success: false,
-        message: 'Error uploading: $e',
-        totalItems: 0,
-        newMedicinesAdded: 0,
-        existingMedicinesUpdated: 0,
-        inventoryItemsCreated: 0,
-        inventoryItemsUpdated: 0,
-        failedItems: items.length,
-        errors: [],
-      );
     }
+    
+    onProgress?.call(totalItems, totalItems, totalBatches, totalBatches);
+    
+    return UploadResponse(
+      success: failedItems == 0,
+      message: 'Upload completed. $newMedicinesAdded new, $existingMedicinesUpdated updated, $inventoryItemsCreated created, $inventoryItemsUpdated inventory updated${failedItems > 0 ? ", $failedItems failed" : ""}',
+      totalItems: totalItems,
+      newMedicinesAdded: newMedicinesAdded,
+      existingMedicinesUpdated: existingMedicinesUpdated,
+      inventoryItemsCreated: inventoryItemsCreated,
+      inventoryItemsUpdated: inventoryItemsUpdated,
+      failedItems: failedItems,
+      errors: allErrors,
+    );
   }
 
   /// Get low stock alerts

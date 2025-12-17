@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/inventory_item.dart';
 import '../services/excel_parser.dart';
+import '../services/csv_parser.dart';
 import '../services/inventory_service.dart';
 
 class UploadScreen extends StatefulWidget {
@@ -27,6 +28,12 @@ class _UploadScreenState extends State<UploadScreen> {
   bool _isUploading = false;
   UploadResponse? _uploadResponse;
   String? _error;
+  
+  // Progress tracking for batch uploads
+  int _uploadedItems = 0;
+  int _totalItems = 0;
+  int _currentBatch = 0;
+  int _totalBatches = 0;
 
   @override
   void initState() {
@@ -45,7 +52,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['xlsx', 'xls'],
+        allowedExtensions: ['xlsx', 'xls', 'csv'],
         withData: true,
       );
 
@@ -54,8 +61,17 @@ class _UploadScreenState extends State<UploadScreen> {
         if (file.bytes != null) {
           _fileName = file.name;
           
-          // Parse Excel
-          final items = ExcelParser.parseExcel(file.bytes!);
+          // Parse based on file type
+          List<InventoryItem> items;
+          final extension = file.name.toLowerCase().split('.').last;
+          
+          if (extension == 'csv') {
+            // Parse CSV
+            items = CsvParser.parseCsv(file.bytes!);
+          } else {
+            // Parse Excel
+            items = ExcelParser.parseExcel(file.bytes!);
+          }
           
           setState(() {
             _parsedItems = items;
@@ -81,23 +97,41 @@ class _UploadScreenState extends State<UploadScreen> {
     setState(() {
       _isUploading = true;
       _error = null;
+      _uploadedItems = 0;
+      _totalItems = _parsedItems!.length;
+      _currentBatch = 0;
+      _totalBatches = (_parsedItems!.length / 500).ceil();
     });
 
     try {
       final response = await InventoryService.uploadInventory(
         _selectedStore!.id,
         _parsedItems!,
+        onProgress: (completed, total, currentBatch, totalBatches) {
+          if (mounted) {
+            setState(() {
+              _uploadedItems = completed;
+              _totalItems = total;
+              _currentBatch = currentBatch;
+              _totalBatches = totalBatches;
+            });
+          }
+        },
       );
 
-      setState(() {
-        _uploadResponse = response;
-        _isUploading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _uploadResponse = response;
+          _isUploading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = 'Upload failed: $e';
-        _isUploading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Upload failed: $e';
+          _isUploading = false;
+        });
+      }
     }
   }
 
@@ -332,7 +366,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Supports .xlsx and .xls files',
+                    'Supports .xlsx, .xls and .csv files',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       color: Colors.grey.shade500,
@@ -375,6 +409,8 @@ class _UploadScreenState extends State<UploadScreen> {
                 DataColumn(label: Text('Type')),
                 DataColumn(label: Text('MRP')),
                 DataColumn(label: Text('Selling Price')),
+                DataColumn(label: Text('Description')),
+                DataColumn(label: Text('Side Effects')),
                 DataColumn(label: Text('Rx')),
               ],
               rows: _parsedItems!.take(10).map((item) {
@@ -405,6 +441,42 @@ class _UploadScreenState extends State<UploadScreen> {
                   DataCell(Text(item.inventoryType ?? '')),
                   DataCell(Text('₹${item.mrp?.toStringAsFixed(2) ?? '-'}')),
                   DataCell(Text('₹${item.sellingPrice.toStringAsFixed(2)}')),
+                  // Description with tooltip
+                  DataCell(
+                    Tooltip(
+                      message: item.usedIn ?? 'No description',
+                      child: SizedBox(
+                        width: 150,
+                        child: Text(
+                          item.usedIn != null && item.usedIn!.isNotEmpty
+                              ? '${item.usedIn!.substring(0, item.usedIn!.length > 50 ? 50 : item.usedIn!.length)}...'
+                              : '-',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: item.usedIn != null ? Colors.green.shade700 : Colors.grey,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Side Effects with tooltip
+                  DataCell(
+                    Tooltip(
+                      message: item.precautions ?? 'No side effects info',
+                      child: SizedBox(
+                        width: 150,
+                        child: Text(
+                          item.precautions != null && item.precautions!.isNotEmpty
+                              ? '${item.precautions!.substring(0, item.precautions!.length > 50 ? 50 : item.precautions!.length)}...'
+                              : '-',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: item.precautions != null ? Colors.orange.shade700 : Colors.grey,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   DataCell(Text(item.prescriptionInfo ?? '')),
                 ]);
               }).toList(),
@@ -462,26 +534,71 @@ class _UploadScreenState extends State<UploadScreen> {
           ),
         ),
         const SizedBox(height: 20),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: _isUploading ? null : _uploadInventory,
-            icon: _isUploading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
+        // Progress indicator when uploading
+        if (_isUploading) ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 3),
                     ),
-                  )
-                : const Icon(Icons.cloud_upload),
-            label: Text(_isUploading ? 'Uploading...' : 'Upload Inventory'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Uploading batch $_currentBatch of $_totalBatches...',
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue.shade800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$_uploadedItems / $_totalItems items processed',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: Colors.blue.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                LinearProgressIndicator(
+                  value: _totalItems > 0 ? _uploadedItems / _totalItems : 0,
+                  backgroundColor: Colors.blue.shade100,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                ),
+              ],
             ),
           ),
-        ),
+        ] else ...[
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _uploadInventory,
+              icon: const Icon(Icons.cloud_upload),
+              label: const Text('Upload Inventory'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
