@@ -60,26 +60,28 @@ class ExcelParser {
       final header = cell!.value.toString().toLowerCase().trim();
       
       // Map various possible header names to our standard keys
+      // Order matters! More specific matches first
       if (header.contains('s.') || header.contains('serial') || header == 'no' || header == 'no.') {
         columnMap['serialNo'] = i;
       } else if (header.contains('product name') || header == 'name' || header == 'medicine') {
         columnMap['productName'] = i;
       } else if (header.contains('composition') || header.contains('salt') || header.contains('generic')) {
         columnMap['composition'] = i;
-      } else if (header.contains('company') || header.contains('manufacturer') || header.contains('brand')) {
+      } else if (header.contains('company') || header.contains('manufacturer')) {
         columnMap['company'] = i;
-      } else if (header.contains('category') || header.contains('type')) {
-        columnMap['category'] = i;
-      } else if (header.contains('tab/qty') || header.contains('pack') || header.contains('strip') || header.contains('per')) {
+      } else if (header.contains('tab/qty') || header.contains('pack') || header.contains('strip') || header.contains('per stp')) {
         columnMap['packSize'] = i;
-      } else if (header.contains('inventory qty') || header.contains('stock') || header.contains('quantity')) {
+      } else if (header.contains('inventory qty') || header.contains('stock') || (header.contains('qty') && !header.contains('tab'))) {
         columnMap['inventoryQty'] = i;
-      } else if (header.contains('inventory type') || header.contains('form')) {
-        columnMap['inventoryType'] = i;
       } else if (header.contains('mrp')) {
+        // MRP - check BEFORE inventory type since "MRP (Inventory type)" contains both
         columnMap['mrp'] = i;
-      } else if (header.contains('selling') || header.contains('price')) {
+      } else if (header.contains('inventory type') || header == 'form' || header == 'type') {
+        columnMap['inventoryType'] = i;
+      } else if (header.contains('selling') || (header.contains('price') && !header.contains('mrp'))) {
         columnMap['sellingPrice'] = i;
+      } else if (header.contains('category')) {
+        columnMap['category'] = i;
       } else if (header.contains('used in') || header.contains('indication') || header.contains('uses')) {
         columnMap['usedIn'] = i;
       } else if (header.contains('precaution') || header.contains('warning') || header.contains('side effect')) {
