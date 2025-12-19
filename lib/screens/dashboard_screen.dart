@@ -25,55 +25,49 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadData(refreshProfile: false); // Don't refresh profile on initial load
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool refreshProfile = true}) async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
-      // First, refresh manager profile to get latest vendorIds (in case super admin assigned new stores)
-      await ref.read(authStateProvider.notifier).refreshProfile();
+      // Get current manager first (from local cache - instant)
+      var manager = ref.read(currentManagerProvider);
       
-      final stores = await InventoryService.getStores();
+      // If refresh requested, refresh manager profile first to get latest vendorIds
+      if (refreshProfile) {
+        await ref.read(authStateProvider.notifier).refreshProfile();
+        manager = ref.read(currentManagerProvider);
+      }
       
-      // Get current manager to filter stores AND stats (now with fresh data)
-      final manager = ref.read(currentManagerProvider);
-      
-      List<Store> filteredStores;
-      Map<String, dynamic> stats;
+      List<Store> stores;
       
       if (manager == null) {
-        // No manager - show nothing
-        filteredStores = [];
-        stats = {'totalMedicines': 0, 'totalInventory': 0, 'totalStores': 0};
-        print('DASHBOARD: No manager logged in, showing 0 stores');
+        stores = [];
+        print('DASHBOARD: No manager logged in');
       } else if (manager.isAdmin) {
-        // Admin users see all stores and global stats
-        filteredStores = stores;
-        stats = await InventoryService.getStats();
-        print('DASHBOARD: Admin access - showing all ${stores.length} stores');
+        // Admin: fetch ALL stores
+        stores = await InventoryService.getStores();
+        print('DASHBOARD: Admin - fetched all ${stores.length} stores');
       } else if (manager.vendorIds.isNotEmpty) {
-        // Regular manager - show only assigned stores and their stats
-        filteredStores = stores.where((store) => 
-          manager.vendorIds.contains(store.id)
-        ).toList();
-        // Get stats ONLY for the manager's assigned stores
-        stats = await InventoryService.getStatsForStores(manager.vendorIds);
-        print('DASHBOARD: Manager ${manager.name} - ${filteredStores.length} stores, ${stats['totalInventory']} inventory records');
+        // Regular manager: fetch ONLY their assigned stores (optimized!)
+        stores = await InventoryService.getStoresByIds(manager.vendorIds);
+        print('DASHBOARD: Manager ${manager.name} - fetched ${stores.length} stores');
       } else {
-        // Manager with NO assigned stores - show nothing
-        filteredStores = [];
-        stats = {'totalMedicines': 0, 'totalInventory': 0, 'totalStores': 0};
-        print('DASHBOARD: Manager ${manager.name} has 0 assigned stores');
+        stores = [];
+        print('DASHBOARD: No assigned stores');
       }
+      
+      // Calculate stats from stores (NO API CALL - instant!)
+      final stats = _calculateStatsFromStores(stores);
       
       setState(() {
         _stores = stores;
-        _filteredStores = filteredStores;
+        _filteredStores = stores; // Already filtered by backend
         _stats = stats;
         _isLoading = false;
       });
@@ -83,6 +77,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  /// Calculate stats from stores data (no API calls needed!)
+  Map<String, dynamic> _calculateStatsFromStores(List<Store> stores) {
+    if (stores.isEmpty) {
+      return {'totalMedicines': 0, 'totalInventory': 0, 'totalStores': 0};
+    }
+    
+    int totalMedicines = 0;
+    int totalInventory = 0;
+    
+    for (final store in stores) {
+      totalMedicines += store.totalMedicines;
+      totalInventory += store.activeMedicines; // Count active items as inventory records
+    }
+    
+    return {
+      'totalMedicines': totalMedicines,
+      'totalInventory': totalInventory,
+      'totalStores': stores.length,
+    };
   }
 
   Future<void> _logout() async {

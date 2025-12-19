@@ -1,6 +1,6 @@
 class ApiConfig {
   // Environment toggle - set to true for local development
-  static const bool _isDevelopment = false;
+  static const bool _isDevelopment = true;
   
   // Development URL (localhost)
   static const String _devBaseUrl = 'http://localhost:8081/api';
@@ -50,8 +50,12 @@ class ApiConfig {
   
   static String get adminInventoryUrl => '$baseUrl/admin/inventory';
   
-  // Stores
+  // Stores (all)
   static String get storesUrl => '$adminInventoryUrl/stores';
+  
+  // Stores filtered by IDs
+  static String storesByIdsUrl(List<String> ids) => 
+      '$adminInventoryUrl/stores?ids=${ids.join(",")}';
   
   // Upload endpoint (regular)
   static String get uploadUrl => '$adminInventoryUrl/upload';

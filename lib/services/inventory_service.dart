@@ -4,7 +4,7 @@ import '../config/api_config.dart';
 import '../models/inventory_item.dart';
 
 class InventoryService {
-  static const Duration _timeout = Duration(seconds: 30);
+  static const Duration _timeout = Duration(seconds: 10); // Reduced timeout for faster failure
 
   /// Get all stores
   static Future<List<Store>> getStores() async {
@@ -25,6 +25,34 @@ class InventoryService {
       throw Exception('Failed to load stores: ${response.statusCode}');
     } catch (e) {
       print('Error fetching stores: $e');
+      rethrow;
+    }
+  }
+
+  /// Get stores by specific IDs (optimized - only fetches what you need)
+  static Future<List<Store>> getStoresByIds(List<String> storeIds) async {
+    if (storeIds.isEmpty) {
+      return [];
+    }
+    
+    try {
+      final response = await http
+          .get(Uri.parse(ApiConfig.storesByIdsUrl(storeIds)))
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          final stores = (data['stores'] as List)
+              .map((s) => Store.fromJson(s as Map<String, dynamic>))
+              .toList();
+          print('Fetched ${stores.length} stores by IDs');
+          return stores;
+        }
+      }
+      throw Exception('Failed to load stores: ${response.statusCode}');
+    } catch (e) {
+      print('Error fetching stores by IDs: $e');
       rethrow;
     }
   }
@@ -81,7 +109,7 @@ class InventoryService {
   }
 
   /// Get inventory stats for specific stores (for non-admin managers)
-  /// Calculates stats by fetching inventory from each assigned store
+  /// Calculates stats by fetching inventory from each assigned store IN PARALLEL
   static Future<Map<String, dynamic>> getStatsForStores(List<String> vendorIds) async {
     if (vendorIds.isEmpty) {
       return {
@@ -95,12 +123,26 @@ class InventoryService {
       int totalInventoryRecords = 0;
       Set<String> uniqueMedicineIds = {};
 
-      // Fetch inventory summary for each assigned store
-      for (final vendorId in vendorIds) {
+      // Fetch inventory summary for ALL stores in PARALLEL (not sequential!)
+      final futures = vendorIds.map((vendorId) async {
         try {
           final inventoryData = await getStoreInventory(vendorId);
-          final summary = inventoryData['summary'] as InventorySummary?;
-          final items = inventoryData['items'] as List<StoreInventoryItem>?;
+          return {'vendorId': vendorId, 'data': inventoryData, 'success': true};
+        } catch (e) {
+          print('Error fetching stats for store $vendorId: $e');
+          return {'vendorId': vendorId, 'data': null, 'success': false};
+        }
+      }).toList();
+
+      // Wait for all to complete (with individual error handling)
+      final results = await Future.wait(futures);
+
+      // Process results
+      for (final result in results) {
+        if (result['success'] == true && result['data'] != null) {
+          final data = result['data'] as Map<String, dynamic>;
+          final summary = data['summary'] as InventorySummary?;
+          final items = data['items'] as List<StoreInventoryItem>?;
           
           if (summary != null) {
             totalInventoryRecords += summary.totalItems;
@@ -110,9 +152,6 @@ class InventoryService {
               uniqueMedicineIds.add(item.medicineId);
             }
           }
-        } catch (e) {
-          print('Error fetching stats for store $vendorId: $e');
-          // Continue with other stores
         }
       }
 
