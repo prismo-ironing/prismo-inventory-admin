@@ -250,5 +250,77 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return false;
     }
   }
+
+  /// Register new manager with email and password
+  Future<bool> registerWithEmail({
+    required String name,
+    required String email,
+    required String phoneNumber,
+    required String password,
+  }) async {
+    state = const AuthState.loading();
+
+    try {
+      final success = await _authService.registerWithEmail(
+        email: email,
+        password: password,
+        name: name,
+        phoneNumber: phoneNumber,
+      );
+
+      if (success) {
+        state = const AuthState.authenticated();
+        _ref.invalidate(currentManagerProvider);
+        return true;
+      } else {
+        state = const AuthState.unauthenticated();
+        return false;
+      }
+    } catch (e) {
+      print('AUTH_PROVIDER: registerWithEmail error: $e');
+      state = AuthState.error(e.toString());
+      return false;
+    }
+  }
+
+  /// Set password for existing manager (enables email login)
+  Future<bool> setPassword({
+    required String managerId,
+    required String password,
+    String? email,
+  }) async {
+    try {
+      final success = await _authService.setPassword(
+        managerId: managerId,
+        password: password,
+        email: email,
+      );
+
+      if (success) {
+        _ref.invalidate(currentManagerProvider);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('AUTH_PROVIDER: setPassword error: $e');
+      state = AuthState.error(e.toString());
+      return false;
+    }
+  }
+
+  /// Refresh manager profile from backend
+  Future<bool> refreshProfile() async {
+    try {
+      final success = await _authService.refreshManagerProfile();
+      if (success) {
+        _ref.invalidate(currentManagerProvider);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('AUTH_PROVIDER: refreshProfile error: $e');
+      return false;
+    }
+  }
 }
 

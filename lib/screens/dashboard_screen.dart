@@ -127,6 +127,336 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  Future<void> _showLinkEmailDialog() async {
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool obscurePassword = true;
+    bool obscureConfirmPassword = true;
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D47A1).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.link, color: Color(0xFF0D47A1)),
+              ),
+              const SizedBox(width: 12),
+              Text('Link Email Account', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Add an email and password to your account. This will allow you to sign in with either phone OTP or email/password.',
+                  style: GoogleFonts.inter(fontSize: 13, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email Address',
+                    hintText: 'your@email.com',
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: passwordController,
+                  obscureText: obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    hintText: 'Min 8 chars with upper, lower, digit, symbol',
+                    prefixIcon: const Icon(Icons.lock_outlined),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscurePassword ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setDialogState(() => obscurePassword = !obscurePassword),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: obscureConfirmPassword,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm Password',
+                    prefixIcon: const Icon(Icons.lock_outlined),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setDialogState(() => obscureConfirmPassword = !obscureConfirmPassword),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Password: 8+ chars with uppercase, lowercase, digit, and special char (@\$!%*?&)',
+                    style: GoogleFonts.inter(fontSize: 11, color: Colors.blue.shade700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: GoogleFonts.inter(color: Colors.grey.shade600)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (emailController.text.trim().isEmpty || !emailController.text.contains('@')) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a valid email'), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+                if (passwordController.text.length < 8) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Password must be at least 8 characters'), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+                if (passwordController.text != confirmPasswordController.text) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Passwords do not match'), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+                Navigator.pop(context, {
+                  'email': emailController.text.trim(),
+                  'password': passwordController.text,
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D47A1),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Link Account', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null) {
+      await _linkEmailAccount(result['email']!, result['password']!);
+    }
+  }
+
+  Future<void> _showSetPasswordDialog() async {
+    final manager = ref.read(currentManagerProvider);
+    final passwordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    final emailController = TextEditingController();
+    bool obscurePassword = true;
+    bool obscureConfirmPassword = true;
+    final needsEmail = manager?.email == null || manager!.email!.isEmpty;
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D47A1).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lock_outline, color: Color(0xFF0D47A1)),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                needsEmail ? 'Set Password' : 'Change Password',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (needsEmail) ...[
+                  Text(
+                    'Email is required for password-based login',
+                    style: GoogleFonts.inter(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      labelText: 'Email Address',
+                      hintText: 'your@email.com',
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                TextField(
+                  controller: passwordController,
+                  obscureText: obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'New Password',
+                    hintText: 'Min 8 chars with upper, lower, digit, symbol',
+                    prefixIcon: const Icon(Icons.lock_outlined),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscurePassword ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setDialogState(() => obscurePassword = !obscurePassword),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: obscureConfirmPassword,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm Password',
+                    prefixIcon: const Icon(Icons.lock_outlined),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setDialogState(() => obscureConfirmPassword = !obscureConfirmPassword),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 2),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: GoogleFonts.inter(color: Colors.grey.shade600)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (needsEmail && (emailController.text.trim().isEmpty || !emailController.text.contains('@'))) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a valid email'), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+                if (passwordController.text.length < 8) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Password must be at least 8 characters'), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+                if (passwordController.text != confirmPasswordController.text) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Passwords do not match'), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+                Navigator.pop(context, {
+                  'email': emailController.text.trim(),
+                  'password': passwordController.text,
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D47A1),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Save Password', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null) {
+      await _linkEmailAccount(result['email']!, result['password']!);
+    }
+  }
+
+  Future<void> _linkEmailAccount(String email, String password) async {
+    final manager = ref.read(currentManagerProvider);
+    if (manager == null) return;
+
+    try {
+      final success = await ref.read(authStateProvider.notifier).setPassword(
+        managerId: manager.id,
+        email: email.isNotEmpty ? email : null,
+        password: password,
+      );
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(email.isNotEmpty 
+                ? 'Email linked successfully! You can now sign in with email/password.'
+                : 'Password updated successfully!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        // Refresh to show updated manager info
+        await ref.read(authStateProvider.notifier).refreshProfile();
+      } else if (mounted) {
+        final errorMessage = ref.read(authStateProvider).errorMessage ?? 'Failed to link email';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final manager = ref.watch(currentManagerProvider);
@@ -149,44 +479,139 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ],
         ),
         actions: [
-          // Manager info
-          if (manager != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Colors.white.withOpacity(0.2),
-                    child: Text(
-                      manager.name.isNotEmpty ? manager.name[0].toUpperCase() : 'M',
-                      style: GoogleFonts.inter(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    manager.name,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.9),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
             tooltip: 'Refresh',
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: 'Logout',
-          ),
+          // Profile menu
+          if (manager != null)
+            PopupMenuButton<String>(
+              offset: const Offset(0, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      child: Text(
+                        manager.name.isNotEmpty ? manager.name[0].toUpperCase() : 'M',
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      manager.name,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.9),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.arrow_drop_down, color: Colors.white.withOpacity(0.7)),
+                  ],
+                ),
+              ),
+              itemBuilder: (context) => [
+                // Profile header
+                PopupMenuItem<String>(
+                  enabled: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        manager.name,
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1A1A2E),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      if (manager.email != null && manager.email!.isNotEmpty)
+                        Row(
+                          children: [
+                            Icon(Icons.email, size: 14, color: Colors.grey.shade600),
+                            const SizedBox(width: 4),
+                            Text(
+                              manager.email!,
+                              style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ),
+                      Row(
+                        children: [
+                          Icon(Icons.phone, size: 14, color: Colors.grey.shade600),
+                          const SizedBox(width: 4),
+                          Text(
+                            manager.phoneNumber,
+                            style: GoogleFonts.inter(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                      const Divider(),
+                    ],
+                  ),
+                ),
+                // Link Email option (only if no email set)
+                if (manager.email == null || manager.email!.isEmpty)
+                  PopupMenuItem<String>(
+                    value: 'link_email',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.link, color: Color(0xFF0D47A1)),
+                        const SizedBox(width: 12),
+                        Text('Link Email Account', style: GoogleFonts.inter()),
+                      ],
+                    ),
+                  ),
+                // Set/Change Password option
+                PopupMenuItem<String>(
+                  value: 'set_password',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lock_outline, color: Color(0xFF0D47A1)),
+                      const SizedBox(width: 12),
+                      Text(
+                        manager.email != null && manager.email!.isNotEmpty 
+                            ? 'Change Password' 
+                            : 'Set Password',
+                        style: GoogleFonts.inter(),
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                // Logout
+                PopupMenuItem<String>(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.logout, color: Colors.red),
+                      const SizedBox(width: 12),
+                      Text('Logout', style: GoogleFonts.inter(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
+              onSelected: (value) {
+                switch (value) {
+                  case 'link_email':
+                    _showLinkEmailDialog();
+                    break;
+                  case 'set_password':
+                    _showSetPasswordDialog();
+                    break;
+                  case 'logout':
+                    _logout();
+                    break;
+                }
+              },
+            ),
           const SizedBox(width: 8),
         ],
       ),

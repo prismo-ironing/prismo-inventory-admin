@@ -1,6 +1,6 @@
 class ApiConfig {
   // Environment toggle - set to true for local development
-  static const bool _isDevelopment = false;
+  static const bool _isDevelopment = true;
   
   // Development URL (localhost)
   static const String _devBaseUrl = 'http://localhost:8081/api';
@@ -25,6 +25,12 @@ class ApiConfig {
   
   // Login with email/password (POST)
   static String get managerEmailLoginUrl => '$managersUrl/login';
+  
+  // Register with email/password (POST)
+  static String get managerEmailRegisterUrl => '$managersUrl/register/email';
+  
+  // Set password for existing manager (POST)
+  static String managerSetPasswordUrl(String managerId) => '$managersUrl/$managerId/password';
   
   // Get manager by ID (GET)
   static String managerByIdUrl(String managerId) => '$managersUrl/$managerId';

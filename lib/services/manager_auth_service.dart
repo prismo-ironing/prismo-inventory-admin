@@ -90,6 +90,101 @@ class ManagerAuthService {
     }
   }
 
+  /// Register with email and password
+  Future<bool> registerWithEmail({
+    required String email,
+    required String password,
+    required String name,
+    required String phoneNumber,
+  }) async {
+    try {
+      print('MANAGER_AUTH: Registering manager with email: $email');
+
+      final registerData = {
+        'email': email,
+        'password': password,
+        'name': name,
+        'phoneNumber': phoneNumber,
+      };
+
+      final response = await _client.post(
+        Uri.parse(ApiConfig.managerEmailRegisterUrl),
+        headers: _headers,
+        body: jsonEncode(registerData),
+      );
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        if (responseData['success'] == true && responseData['manager'] != null) {
+          _currentManager = Manager.fromJson(responseData['manager']);
+          print('MANAGER_AUTH: Registration successful for manager: ${_currentManager!.id}');
+          await _saveAuthState(true, 'email');
+          return true;
+        } else {
+          throw Exception(responseData['message'] ?? 'Registration failed');
+        }
+      } else {
+        final errorData = jsonDecode(response.body);
+        final errorMessage = errorData['message'] ?? 'Registration failed. Please try again.';
+        print('MANAGER_AUTH: Registration failed: ${response.statusCode} $errorMessage');
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      print('MANAGER_AUTH: Registration error: $e');
+      if (e.toString().contains('Failed to fetch') || e.toString().contains('ClientException')) {
+        throw Exception('Unable to connect to server. Please check your internet connection.');
+      }
+      rethrow;
+    }
+  }
+
+  /// Set password for existing manager (enables email login)
+  Future<bool> setPassword({
+    required String managerId,
+    required String password,
+    String? email,
+  }) async {
+    try {
+      print('MANAGER_AUTH: Setting password for manager: $managerId');
+
+      final requestData = <String, dynamic>{
+        'password': password,
+      };
+      if (email != null && email.isNotEmpty) {
+        requestData['email'] = email;
+      }
+
+      final response = await _client.post(
+        Uri.parse(ApiConfig.managerSetPasswordUrl(managerId)),
+        headers: _headers,
+        body: jsonEncode(requestData),
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        if (responseData['success'] == true) {
+          print('MANAGER_AUTH: Password set successfully');
+          // Refresh manager profile to get updated email
+          await refreshManagerProfile();
+          return true;
+        } else {
+          throw Exception(responseData['message'] ?? 'Failed to set password');
+        }
+      } else {
+        final errorData = jsonDecode(response.body);
+        final errorMessage = errorData['message'] ?? 'Failed to set password';
+        print('MANAGER_AUTH: Set password failed: ${response.statusCode} $errorMessage');
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      print('MANAGER_AUTH: Set password error: $e');
+      if (e.toString().contains('Failed to fetch') || e.toString().contains('ClientException')) {
+        throw Exception('Unable to connect to server. Please check your internet connection.');
+      }
+      rethrow;
+    }
+  }
+
   // =====================================================
   // PHONE NUMBER AUTHENTICATION (Web - JavaScript interop)
   // =====================================================
