@@ -35,9 +35,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     });
 
     try {
+      // First, refresh manager profile to get latest vendorIds (in case super admin assigned new stores)
+      await ref.read(authStateProvider.notifier).refreshProfile();
+      
       final stores = await InventoryService.getStores();
       
-      // Get current manager to filter stores AND stats
+      // Get current manager to filter stores AND stats (now with fresh data)
       final manager = ref.read(currentManagerProvider);
       
       List<Store> filteredStores;
