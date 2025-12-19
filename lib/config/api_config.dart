@@ -1,6 +1,6 @@
 class ApiConfig {
   // Environment toggle - set to true for local development
-  static const bool _isDevelopment = true;
+  static const bool _isDevelopment = false;
   
   // Development URL (localhost)
   static const String _devBaseUrl = 'http://localhost:8081/api';

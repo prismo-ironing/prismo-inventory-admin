@@ -707,8 +707,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final manager = ref.watch(currentManagerProvider);
     if (manager == null) return const SizedBox.shrink();
 
-    return Card(
-      color: const Color(0xFF0D47A1).withOpacity(0.05),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF0D47A1).withOpacity(0.15),
+            const Color(0xFF1976D2).withOpacity(0.10),
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF0D47A1).withOpacity(0.2),
+          width: 1,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -716,7 +730,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF0D47A1).withOpacity(0.1),
+                color: const Color(0xFF0D47A1).withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
