@@ -22,11 +22,44 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
   String _filterStatus = 'all';
   String _sortBy = 'name';
   bool _sortAsc = true;
+  
+  // Pagination
+  static const int _pageSize = 50;
+  int _currentPage = 0;
+  bool _hasMoreItems = true;
+  final ScrollController _scrollController = ScrollController();
+  
+  List<StoreInventoryItem> get _visibleItems {
+    final endIndex = (_currentPage + 1) * _pageSize;
+    if (endIndex >= _filteredItems.length) {
+      _hasMoreItems = false;
+      return _filteredItems;
+    }
+    _hasMoreItems = true;
+    return _filteredItems.sublist(0, endIndex);
+  }
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadInventory();
+  }
+  
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+  
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      if (_hasMoreItems && !_isLoading) {
+        setState(() {
+          _currentPage++;
+        });
+      }
+    }
   }
 
   Future<void> _loadInventory() async {
@@ -40,6 +73,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
       setState(() {
         _summary = data['summary'] as InventorySummary;
         _items = data['items'] as List<StoreInventoryItem>;
+        _currentPage = 0; // Reset pagination
         _applyFilters();
         _isLoading = false;
       });
@@ -100,6 +134,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
     });
 
     _filteredItems = filtered;
+    _currentPage = 0; // Reset pagination when filters change
   }
 
   @override
@@ -398,31 +433,57 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
       );
     }
 
+    final visibleItems = _visibleItems;
+    
     return Card(
       margin: const EdgeInsets.all(16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SingleChildScrollView(
-          child: DataTable(
-            headingRowColor: WidgetStateProperty.all(Colors.grey.shade100),
-            columnSpacing: 24,
-            dataRowMinHeight: 48,
-            dataRowMaxHeight: 56,
-            columns: const [
-              DataColumn(label: Text('Medicine')),
-              DataColumn(label: Text('Category')),
-              DataColumn(label: Text('Manufacturer')),
-              DataColumn(label: Text('Form')),
-              DataColumn(label: Text('Pack Size')),
-              DataColumn(label: Text('MRP'), numeric: true),
-              DataColumn(label: Text('Selling Price'), numeric: true),
-              DataColumn(label: Text('Stock'), numeric: true),
-              DataColumn(label: Text('Status')),
-              DataColumn(label: Text('Expiry')),
-              DataColumn(label: Text('Last Updated')),
-              DataColumn(label: Text('Actions')),
-            ],
-            rows: _filteredItems.map((item) {
+      child: Column(
+        children: [
+          // Pagination info
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: Colors.blue.shade50,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Showing ${visibleItems.length} of ${_filteredItems.length} items',
+                  style: GoogleFonts.inter(fontSize: 12, color: Colors.blue.shade700),
+                ),
+                if (_hasMoreItems)
+                  TextButton.icon(
+                    onPressed: () => setState(() => _currentPage++),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Load More'),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowColor: WidgetStateProperty.all(Colors.grey.shade100),
+                  columnSpacing: 24,
+                  dataRowMinHeight: 48,
+                  dataRowMaxHeight: 56,
+                  columns: const [
+                    DataColumn(label: Text('Medicine')),
+                    DataColumn(label: Text('Category')),
+                    DataColumn(label: Text('Manufacturer')),
+                    DataColumn(label: Text('Form')),
+                    DataColumn(label: Text('Pack Size')),
+                    DataColumn(label: Text('MRP'), numeric: true),
+                    DataColumn(label: Text('Selling Price'), numeric: true),
+                    DataColumn(label: Text('Stock'), numeric: true),
+                    DataColumn(label: Text('Status')),
+                    DataColumn(label: Text('Expiry')),
+                    DataColumn(label: Text('Last Updated')),
+                    DataColumn(label: Text('Actions')),
+                  ],
+                  rows: visibleItems.map((item) {
               return DataRow(
                 cells: [
                   DataCell(
@@ -482,8 +543,11 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
                 ],
               );
             }).toList(),
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

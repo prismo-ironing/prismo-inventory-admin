@@ -18,21 +18,191 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Prismo Inventory Admin - Store Management Dashboard">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="prismo_inventory_admin">
+  <meta name="apple-mobile-web-app-title" content="Prismo Admin">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>prismo_inventory_admin</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <title>Prismo Inventory Admin</title>
   <link rel="manifest" href="manifest.json">
+  
+  <style>
+    body, * {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+    
+    /* Loading state */
+    .flutter-loading {
+      font-family: 'Inter', sans-serif;
+    }
+    
+    /* reCAPTCHA modal overlay */
+    #recaptcha-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 10000;
+      justify-content: center;
+      align-items: center;
+    }
+    #recaptcha-overlay.show {
+      display: flex;
+    }
+    #recaptcha-box {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      text-align: center;
+    }
+    #recaptcha-box h3 {
+      margin: 0 0 20px 0;
+      color: #333;
+    }
+  </style>
 </head>
 <body>
+  <!-- Firebase SDK v9 (compat mode for phone auth) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  
+  <!-- reCAPTCHA overlay modal -->
+  <div id="recaptcha-overlay">
+    <div id="recaptcha-box">
+      <h3>Verify you're human</h3>
+      <div id="recaptcha-container"></div>
+    </div>
+  </div>
+  
+  <script>
+    // Firebase configuration for Prismo (using prismo-dev-app project)
+    const firebaseConfig = {
+      apiKey: "AIzaSyAJTVDkK4pnoe_NWkru0Cy_TRcLBLgb09Q",
+      authDomain: "prismo-dev-app.firebaseapp.com",
+      projectId: "prismo-dev-app",
+      storageBucket: "prismo-dev-app.appspot.com",
+      messagingSenderId: "184530546940",
+      appId: "1:184530546940:web:2fc7df385d04ac44da6779",
+      measurementId: "G-F42KECJQ27"
+    };
+    
+    // Initialize Firebase (only once)
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    
+    // Initialize Firebase Auth
+    const auth = firebase.auth();
+    auth.languageCode = 'en';
+    
+    // Store for pending verification
+    let pendingPhoneNumber = null;
+    let pendingResolve = null;
+    let pendingReject = null;
+    
+    // Function to show reCAPTCHA overlay
+    function showRecaptchaOverlay() {
+      document.getElementById('recaptcha-overlay').classList.add('show');
+    }
+    
+    // Function to hide reCAPTCHA overlay
+    function hideRecaptchaOverlay() {
+      document.getElementById('recaptcha-overlay').classList.remove('show');
+    }
+    
+    // Function to create fresh reCAPTCHA container
+    function resetRecaptchaContainer() {
+      const container = document.getElementById('recaptcha-container');
+      container.innerHTML = '';
+    }
+    
+    // Function to send phone verification (called from Flutter)
+    window.sendPhoneVerification = function(phoneNumber) {
+      return new Promise(function(resolve, reject) {
+        console.log('JS: Starting phone verification for:', phoneNumber);
+        
+        pendingPhoneNumber = phoneNumber;
+        pendingResolve = resolve;
+        pendingReject = reject;
+        
+        // Reset and show the reCAPTCHA
+        resetRecaptchaContainer();
+        showRecaptchaOverlay();
+        
+        // Create a new visible reCAPTCHA verifier
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+          'size': 'normal',
+          'callback': function(response) {
+            console.log('JS: reCAPTCHA solved, sending verification code...');
+            
+            // reCAPTCHA solved, now send the verification code
+            auth.signInWithPhoneNumber(pendingPhoneNumber, window.recaptchaVerifier)
+              .then(function(confirmationResult) {
+                console.log('JS: SMS sent successfully!');
+                hideRecaptchaOverlay();
+                window.confirmationResult = confirmationResult;
+                pendingResolve(confirmationResult.verificationId);
+              })
+              .catch(function(error) {
+                console.error('JS: Error sending SMS:', error);
+                hideRecaptchaOverlay();
+                pendingReject(error);
+              });
+          },
+          'expired-callback': function() {
+            console.log('JS: reCAPTCHA expired');
+            hideRecaptchaOverlay();
+            pendingReject(new Error('reCAPTCHA expired. Please try again.'));
+          }
+        });
+        
+        // Render the reCAPTCHA
+        window.recaptchaVerifier.render().then(function(widgetId) {
+          console.log('JS: reCAPTCHA rendered, waiting for user to solve...');
+          window.recaptchaWidgetId = widgetId;
+        }).catch(function(error) {
+          console.error('JS: Error rendering reCAPTCHA:', error);
+          hideRecaptchaOverlay();
+          reject(error);
+        });
+      });
+    };
+    
+    // Function to verify phone code (called from Flutter)
+    window.verifyPhoneCode = function(verificationCode) {
+      return new Promise(function(resolve, reject) {
+        console.log('JS: Verifying code...');
+        if (window.confirmationResult) {
+          window.confirmationResult.confirm(verificationCode)
+            .then(function(result) {
+              console.log('JS: Phone verification successful!');
+              resolve(result.user);
+            })
+            .catch(function(error) {
+              console.error('JS: Error verifying code:', error);
+              reject(error);
+            });
+        } else {
+          reject(new Error('No confirmation result available. Please request a new code.'));
+        }
+      });
+    };
+  </script>
+  
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

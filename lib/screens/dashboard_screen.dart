@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/inventory_service.dart';
 import '../models/inventory_item.dart';
+import '../providers/auth_providers.dart';
 import 'upload_screen.dart';
 import 'inventory_view_screen.dart';
+import 'login_screen.dart';
 
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isLoading = true;
   String? _error;
   List<Store> _stores = [];
+  List<Store> _filteredStores = [];
   Map<String, dynamic>? _stats;
 
   @override
@@ -32,10 +36,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     try {
       final stores = await InventoryService.getStores();
-      final stats = await InventoryService.getStats();
+      
+      // Get current manager to filter stores AND stats
+      final manager = ref.read(currentManagerProvider);
+      
+      List<Store> filteredStores;
+      Map<String, dynamic> stats;
+      
+      if (manager == null) {
+        // No manager - show nothing
+        filteredStores = [];
+        stats = {'totalMedicines': 0, 'totalInventory': 0, 'totalStores': 0};
+        print('DASHBOARD: No manager logged in, showing 0 stores');
+      } else if (manager.isAdmin) {
+        // Admin users see all stores and global stats
+        filteredStores = stores;
+        stats = await InventoryService.getStats();
+        print('DASHBOARD: Admin access - showing all ${stores.length} stores');
+      } else if (manager.vendorIds.isNotEmpty) {
+        // Regular manager - show only assigned stores and their stats
+        filteredStores = stores.where((store) => 
+          manager.vendorIds.contains(store.id)
+        ).toList();
+        // Get stats ONLY for the manager's assigned stores
+        stats = await InventoryService.getStatsForStores(manager.vendorIds);
+        print('DASHBOARD: Manager ${manager.name} - ${filteredStores.length} stores, ${stats['totalInventory']} inventory records');
+      } else {
+        // Manager with NO assigned stores - show nothing
+        filteredStores = [];
+        stats = {'totalMedicines': 0, 'totalInventory': 0, 'totalStores': 0};
+        print('DASHBOARD: Manager ${manager.name} has 0 assigned stores');
+      }
       
       setState(() {
         _stores = stores;
+        _filteredStores = filteredStores;
         _stats = stats;
         _isLoading = false;
       });
@@ -47,8 +82,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.logout, color: Colors.red),
+            const SizedBox(width: 12),
+            Text('Logout', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to logout?',
+          style: GoogleFonts.inter(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: GoogleFonts.inter(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Logout', style: GoogleFonts.inter()),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await ref.read(authStateProvider.notifier).logout();
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false,
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final manager = ref.watch(currentManagerProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
@@ -67,10 +149,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         actions: [
+          // Manager info
+          if (manager != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                    child: Text(
+                      manager.name.isNotEmpty ? manager.name[0].toUpperCase() : 'M',
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    manager.name,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
             tooltip: 'Refresh',
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logout,
+            tooltip: 'Logout',
           ),
           const SizedBox(width: 8),
         ],
@@ -125,6 +240,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Manager Access Info
+            _buildManagerAccessInfo(),
+            const SizedBox(height: 24),
+            
             // Stats Cards
             _buildStatsSection(),
             const SizedBox(height: 32),
@@ -135,6 +254,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
             
             // Stores List
             _buildStoresSection(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildManagerAccessInfo() {
+    final manager = ref.watch(currentManagerProvider);
+    if (manager == null) return const SizedBox.shrink();
+
+    return Card(
+      color: const Color(0xFF0D47A1).withOpacity(0.05),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D47A1).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                manager.isAdmin ? Icons.admin_panel_settings : Icons.store,
+                color: const Color(0xFF0D47A1),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Welcome, ${manager.name}',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1A1A2E),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    manager.isAdmin 
+                        ? 'Admin Access - All stores visible'
+                        : 'Store Access: ${_filteredStores.length} store(s)',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: manager.isAdmin ? Colors.purple.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                manager.role.replaceAll('_', ' '),
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: manager.isAdmin ? Colors.purple : Colors.green,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -176,8 +363,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(width: 16),
             Expanded(
               child: _buildStatCard(
-                'Active Stores',
-                '${_stats?['totalStores'] ?? 0}',
+                'Your Stores',
+                '${_filteredStores.length}',
                 Icons.store,
                 const Color(0xFFFF9800),
               ),
@@ -331,7 +518,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Stores',
+          'Your Stores',
           style: GoogleFonts.inter(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -341,7 +528,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 16),
         Card(
           clipBehavior: Clip.antiAlias,
-          child: _stores.isEmpty
+          child: _filteredStores.isEmpty
               ? Container(
                   padding: const EdgeInsets.all(48),
                   child: Center(
@@ -350,10 +537,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Icon(Icons.store_outlined, size: 64, color: Colors.grey.shade300),
                         const SizedBox(height: 16),
                         Text(
-                          'No stores found',
+                          'No stores assigned to you',
                           style: GoogleFonts.inter(
                             fontSize: 16,
                             color: Colors.grey.shade600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Contact an admin to get store access',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: Colors.grey.shade500,
                           ),
                         ),
                       ],
@@ -391,7 +586,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ),
                       // Data Rows
-                      ..._stores.map((store) => TableRow(
+                      ..._filteredStores.map((store) => TableRow(
                         decoration: BoxDecoration(
                           border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
                         ),
@@ -528,7 +723,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => UploadScreen(
-          stores: _stores,
+          stores: _filteredStores,
           preselectedStore: preselectedStore,
         ),
       ),
@@ -554,13 +749,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         content: SizedBox(
           width: 400,
-          child: _stores.isEmpty
+          child: _filteredStores.isEmpty
               ? const Text('No stores available')
               : ListView.builder(
                   shrinkWrap: true,
-                  itemCount: _stores.length,
+                  itemCount: _filteredStores.length,
                   itemBuilder: (context, index) {
-                    final store = _stores[index];
+                    final store = _filteredStores[index];
                     return ListTile(
                       leading: const Icon(Icons.store),
                       title: Text(store.name),
@@ -587,4 +782,3 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
-

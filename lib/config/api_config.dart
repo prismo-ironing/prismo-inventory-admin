@@ -1,6 +1,6 @@
 class ApiConfig {
-  // Environment toggle - set to false for production
-  static const bool _isDevelopment = false;
+  // Environment toggle - set to true for local development
+  static const bool _isDevelopment = true;
   
   // Development URL (localhost)
   static const String _devBaseUrl = 'http://localhost:8081/api';
@@ -11,14 +11,47 @@ class ApiConfig {
   // Active base URL
   static String get baseUrl => _isDevelopment ? _devBaseUrl : _prodBaseUrl;
   
-  // Admin endpoints
+  // =====================================================
+  // MANAGER AUTHENTICATION ENDPOINTS
+  // =====================================================
+  
+  static String get managersUrl => '$baseUrl/admin/managers';
+  
+  // Register new manager (POST)
+  static String get managerRegisterUrl => '$managersUrl/register';
+  
+  // Login with phone number (POST) - after Firebase OTP
+  static String get managerPhoneLoginUrl => '$managersUrl/login/phone';
+  
+  // Login with email/password (POST)
+  static String get managerEmailLoginUrl => '$managersUrl/login';
+  
+  // Get manager by ID (GET)
+  static String managerByIdUrl(String managerId) => '$managersUrl/$managerId';
+  
+  // Get manager by phone (GET)
+  static String managerByPhoneUrl(String phoneNumber) => '$managersUrl/by-phone/$phoneNumber';
+  
+  // Update manager profile (PUT)
+  static String managerUpdateUrl(String managerId) => '$managersUrl/$managerId';
+  
+  // Get manager for a vendor (GET)
+  static String managerForVendorUrl(String vendorId) => '$managersUrl/vendor/$vendorId';
+  
+  // =====================================================
+  // ADMIN INVENTORY ENDPOINTS
+  // =====================================================
+  
   static String get adminInventoryUrl => '$baseUrl/admin/inventory';
   
   // Stores
   static String get storesUrl => '$adminInventoryUrl/stores';
   
-  // Upload endpoint
+  // Upload endpoint (regular)
   static String get uploadUrl => '$adminInventoryUrl/upload';
+  
+  // Bulk upload endpoint (optimized for large uploads)
+  static String get bulkUploadUrl => '$adminInventoryUrl/bulk-upload';
   
   // Store inventory
   static String storeInventoryUrl(String storeId) => '$adminInventoryUrl/store/$storeId';

@@ -49,6 +49,13 @@ dependencies:
   
   # State management
   flutter_riverpod: ^2.4.9
+  
+  # Firebase for phone OTP authentication
+  firebase_core: ^3.13.0
+  firebase_auth: ^5.5.4
+  
+  # Shared preferences for session persistence
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:

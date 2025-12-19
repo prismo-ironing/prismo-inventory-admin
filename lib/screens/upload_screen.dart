@@ -498,42 +498,49 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Widget _buildUploadSection() {
+    // Show success state if upload completed successfully
+    if (_uploadResponse != null && _uploadResponse!.success) {
+      return _buildSuccessState();
+    }
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.blue.shade50,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, color: Colors.blue.shade700),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Ready to upload',
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blue.shade700,
+        // Show info banner only if not uploaded yet
+        if (_uploadResponse == null)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.blue.shade700),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ready to upload',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue.shade700,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${_parsedItems!.length} items will be uploaded to ${_selectedStore!.name}',
-                      style: TextStyle(color: Colors.blue.shade700),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_parsedItems!.length} items will be uploaded to ${_selectedStore!.name}',
+                        style: TextStyle(color: Colors.blue.shade700),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
+        if (_uploadResponse == null) const SizedBox(height: 20),
         // Progress indicator when uploading
         if (_isUploading) ...[
           Container(
@@ -586,7 +593,7 @@ class _UploadScreenState extends State<UploadScreen> {
               ],
             ),
           ),
-        ] else ...[
+        ] else if (_uploadResponse == null) ...[
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -599,6 +606,141 @@ class _UploadScreenState extends State<UploadScreen> {
             ),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _buildSuccessState() {
+    final response = _uploadResponse!;
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade200, width: 2),
+      ),
+      child: Column(
+        children: [
+          // Animated success icon
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.elasticOut,
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: value,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade500,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.shade200,
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Upload Successful!',
+            style: GoogleFonts.inter(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: Colors.green.shade700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'All ${response.totalItems} items processed successfully',
+            style: GoogleFonts.inter(
+              fontSize: 16,
+              color: Colors.green.shade600,
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Stats row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildStatColumn('New', response.newMedicinesAdded, Icons.add_circle_outline, Colors.blue),
+              _buildStatColumn('Updated', response.existingMedicinesUpdated, Icons.update, Colors.teal),
+              _buildStatColumn('Inventory', response.inventoryItemsCreated + response.inventoryItemsUpdated, Icons.inventory_2, Colors.green),
+            ],
+          ),
+          const SizedBox(height: 24),
+          // Action buttons
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _uploadResponse = null;
+                      _parsedItems = null;
+                      _fileName = null;
+                    });
+                  },
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text('Upload Another'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    foregroundColor: Colors.green.shade700,
+                    side: BorderSide(color: Colors.green.shade300),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context, true),
+                  icon: const Icon(Icons.visibility),
+                  label: const Text('View Inventory'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: Colors.green.shade600,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatColumn(String label, int value, IconData icon, Color color) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 28),
+        const SizedBox(height: 4),
+        Text(
+          '$value',
+          style: GoogleFonts.inter(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+          ),
+        ),
       ],
     );
   }

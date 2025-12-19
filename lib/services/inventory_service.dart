@@ -56,7 +56,7 @@ class InventoryService {
     }
   }
 
-  /// Get inventory stats
+  /// Get inventory stats (global - for admins only)
   static Future<Map<String, dynamic>> getStats() async {
     try {
       final response = await http
@@ -80,18 +80,71 @@ class InventoryService {
     }
   }
 
+  /// Get inventory stats for specific stores (for non-admin managers)
+  /// Calculates stats by fetching inventory from each assigned store
+  static Future<Map<String, dynamic>> getStatsForStores(List<String> vendorIds) async {
+    if (vendorIds.isEmpty) {
+      return {
+        'totalMedicines': 0,
+        'totalInventory': 0,
+        'totalStores': 0,
+      };
+    }
+
+    try {
+      int totalInventoryRecords = 0;
+      Set<String> uniqueMedicineIds = {};
+
+      // Fetch inventory summary for each assigned store
+      for (final vendorId in vendorIds) {
+        try {
+          final inventoryData = await getStoreInventory(vendorId);
+          final summary = inventoryData['summary'] as InventorySummary?;
+          final items = inventoryData['items'] as List<StoreInventoryItem>?;
+          
+          if (summary != null) {
+            totalInventoryRecords += summary.totalItems;
+          }
+          if (items != null) {
+            for (final item in items) {
+              uniqueMedicineIds.add(item.medicineId);
+            }
+          }
+        } catch (e) {
+          print('Error fetching stats for store $vendorId: $e');
+          // Continue with other stores
+        }
+      }
+
+      return {
+        'totalMedicines': uniqueMedicineIds.length,
+        'totalInventory': totalInventoryRecords,
+        'totalStores': vendorIds.length,
+      };
+    } catch (e) {
+      print('Error calculating stats for stores: $e');
+      return {
+        'totalMedicines': 0,
+        'totalInventory': 0,
+        'totalStores': vendorIds.length,
+      };
+    }
+  }
+
   /// Upload inventory from parsed Excel/CSV data with batching for large files
+  /// Uses optimized bulk-upload endpoint for faster processing
   /// [onProgress] callback receives (completed, total, currentBatch, totalBatches)
   static Future<UploadResponse> uploadInventory(
     String storeId, 
     List<InventoryItem> items, {
     void Function(int completed, int total, int currentBatch, int totalBatches)? onProgress,
   }) async {
-    const int batchSize = 500; // Upload 500 items at a time
+    // Use larger batch size with bulk endpoint (handles 10k+ items efficiently)
+    const int batchSize = 2000; // Upload 2000 items at a time with bulk endpoint
     final int totalItems = items.length;
     final int totalBatches = (totalItems / batchSize).ceil();
     
-    print('Uploading $totalItems items in $totalBatches batches to store $storeId');
+    print('Uploading $totalItems items in $totalBatches batches to store $storeId (using bulk endpoint)');
     
     // Aggregate results across batches
     int newMedicinesAdded = 0;
@@ -115,13 +168,14 @@ class InventoryService {
           'items': batch.map((i) => i.toJson()).toList(),
         });
 
+        // Use bulk-upload endpoint for optimized batch processing
         final response = await http
             .post(
-              Uri.parse(ApiConfig.uploadUrl),
+              Uri.parse(ApiConfig.bulkUploadUrl),
               headers: {'Content-Type': 'application/json'},
               body: requestBody,
             )
-            .timeout(const Duration(seconds: 120)); // 2 min timeout per batch
+            .timeout(const Duration(seconds: 180)); // 3 min timeout for large batches
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
