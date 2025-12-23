@@ -292,3 +292,230 @@ class PaginationInfo {
   }
 }
 
+// =====================================================
+// DEDUCTION MODELS
+// =====================================================
+
+/// Item to deduct from inventory (used in bulk deduction)
+class DeductionItem {
+  final int? serialNo;
+  final String? medicineId;
+  final String? productName;
+  final int quantityToDeduct;
+  final String? reason;
+  final String? batchNumber;
+
+  DeductionItem({
+    this.serialNo,
+    this.medicineId,
+    this.productName,
+    required this.quantityToDeduct,
+    this.reason,
+    this.batchNumber,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (serialNo != null) 'serialNo': serialNo,
+      if (medicineId != null) 'medicineId': medicineId,
+      if (productName != null) 'productName': productName,
+      'quantityToDeduct': quantityToDeduct,
+      if (reason != null) 'reason': reason,
+      if (batchNumber != null) 'batchNumber': batchNumber,
+    };
+  }
+}
+
+/// Response from bulk deduction API
+class DeductionResponse {
+  final bool success;
+  final String message;
+  final int totalItems;
+  final int successfulDeductions;
+  final int itemsSetToZero;
+  final int itemsRemoved;
+  final int failedItems;
+  final int skippedItems;
+  final List<DeductionResult> results;
+  final List<DeductionError> errors;
+
+  DeductionResponse({
+    required this.success,
+    required this.message,
+    required this.totalItems,
+    required this.successfulDeductions,
+    required this.itemsSetToZero,
+    required this.itemsRemoved,
+    required this.failedItems,
+    required this.skippedItems,
+    required this.results,
+    required this.errors,
+  });
+
+  factory DeductionResponse.fromJson(Map<String, dynamic> json) {
+    return DeductionResponse(
+      success: json['success'] as bool? ?? false,
+      message: json['message'] as String? ?? '',
+      totalItems: json['totalItems'] as int? ?? 0,
+      successfulDeductions: json['successfulDeductions'] as int? ?? 0,
+      itemsSetToZero: json['itemsSetToZero'] as int? ?? 0,
+      itemsRemoved: json['itemsRemoved'] as int? ?? 0,
+      failedItems: json['failedItems'] as int? ?? 0,
+      skippedItems: json['skippedItems'] as int? ?? 0,
+      results: (json['results'] as List<dynamic>?)
+              ?.map((e) => DeductionResult.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      errors: (json['errors'] as List<dynamic>?)
+              ?.map((e) => DeductionError.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+  }
+}
+
+/// Result of a successful deduction
+class DeductionResult {
+  final int? serialNo;
+  final String medicineId;
+  final String? productName;
+  final int previousStock;
+  final int quantityDeducted;
+  final int newStock;
+  final String status; // SUCCESS, ZERO_STOCK, REMOVED
+
+  DeductionResult({
+    this.serialNo,
+    required this.medicineId,
+    this.productName,
+    required this.previousStock,
+    required this.quantityDeducted,
+    required this.newStock,
+    required this.status,
+  });
+
+  factory DeductionResult.fromJson(Map<String, dynamic> json) {
+    return DeductionResult(
+      serialNo: json['serialNo'] as int?,
+      medicineId: json['medicineId'] as String? ?? '',
+      productName: json['productName'] as String?,
+      previousStock: json['previousStock'] as int? ?? 0,
+      quantityDeducted: json['quantityDeducted'] as int? ?? 0,
+      newStock: json['newStock'] as int? ?? 0,
+      status: json['status'] as String? ?? 'UNKNOWN',
+    );
+  }
+}
+
+/// Error from a failed deduction
+class DeductionError {
+  final int? serialNo;
+  final String? medicineId;
+  final String? productName;
+  final String errorMessage;
+  final String? errorCode; // NOT_FOUND, INSUFFICIENT_STOCK, INVALID_QUANTITY, etc.
+  final int? requestedDeduction;
+  final int? availableStock;
+
+  DeductionError({
+    this.serialNo,
+    this.medicineId,
+    this.productName,
+    required this.errorMessage,
+    this.errorCode,
+    this.requestedDeduction,
+    this.availableStock,
+  });
+
+  factory DeductionError.fromJson(Map<String, dynamic> json) {
+    return DeductionError(
+      serialNo: json['serialNo'] as int?,
+      medicineId: json['medicineId'] as String?,
+      productName: json['productName'] as String?,
+      errorMessage: json['errorMessage'] as String? ?? 'Unknown error',
+      errorCode: json['errorCode'] as String?,
+      requestedDeduction: json['requestedDeduction'] as int?,
+      availableStock: json['availableStock'] as int?,
+    );
+  }
+}
+
+// =====================================================
+// BULK DELETE MODELS
+// =====================================================
+
+/// Item to delete from inventory
+class DeleteItem {
+  final String? productName;
+  final String? medicineId;
+
+  DeleteItem({
+    this.productName,
+    this.medicineId,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (productName != null) 'productName': productName,
+      if (medicineId != null) 'medicineId': medicineId,
+    };
+  }
+}
+
+/// Response from bulk delete operation
+class BulkDeleteResponse {
+  final bool success;
+  final String message;
+  final int totalItems;
+  final int successfulDeletes;
+  final int notFoundItems;
+  final int failedDeletes;
+  final List<BulkDeleteError> errors;
+
+  BulkDeleteResponse({
+    required this.success,
+    required this.message,
+    required this.totalItems,
+    required this.successfulDeletes,
+    required this.notFoundItems,
+    required this.failedDeletes,
+    required this.errors,
+  });
+
+  factory BulkDeleteResponse.fromJson(Map<String, dynamic> json) {
+    return BulkDeleteResponse(
+      success: json['success'] as bool? ?? false,
+      message: json['message'] as String? ?? '',
+      totalItems: json['totalItems'] as int? ?? 0,
+      successfulDeletes: json['successfulDeletes'] as int? ?? 0,
+      notFoundItems: json['notFoundItems'] as int? ?? 0,
+      failedDeletes: json['failedDeletes'] as int? ?? 0,
+      errors: (json['errors'] as List?)
+              ?.map((e) => BulkDeleteError.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+  }
+}
+
+/// Error from bulk delete operation
+class BulkDeleteError {
+  final String? productName;
+  final String? medicineId;
+  final String error;
+
+  BulkDeleteError({
+    this.productName,
+    this.medicineId,
+    required this.error,
+  });
+
+  factory BulkDeleteError.fromJson(Map<String, dynamic> json) {
+    return BulkDeleteError(
+      productName: json['productName'] as String?,
+      medicineId: json['medicineId'] as String?,
+      error: json['error'] as String? ?? 'Unknown error',
+    );
+  }
+}
+

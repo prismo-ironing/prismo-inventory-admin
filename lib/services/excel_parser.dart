@@ -178,5 +178,71 @@ class ExcelParser {
     
     return double.tryParse(strValue);
   }
+
+  /// Parse Excel file bytes into delete items (just product names)
+  static List<DeleteItem> parseDeleteExcel(Uint8List bytes) {
+    final excel = Excel.decodeBytes(bytes);
+    final List<DeleteItem> items = [];
+
+    // Get first sheet
+    final sheetName = excel.tables.keys.first;
+    final sheet = excel.tables[sheetName];
+
+    if (sheet == null || sheet.rows.isEmpty) {
+      throw Exception('Empty or invalid Excel file');
+    }
+
+    // Find header row
+    final headerRow = sheet.rows.first;
+    int? productNameIndex;
+    int? medicineIdIndex;
+
+    for (int i = 0; i < headerRow.length; i++) {
+      final cell = headerRow[i];
+      if (cell?.value == null) continue;
+      
+      final header = cell!.value.toString().toLowerCase().trim();
+      if (header.contains('product name') || header == 'name' || header == 'medicine' || header == 'medicine name') {
+        productNameIndex = i;
+      }
+      if (header == 'medicine_id' || header.contains('medicine id') || header == 'id') {
+        medicineIdIndex = i;
+      }
+    }
+
+    if (productNameIndex == null && medicineIdIndex == null) {
+      throw Exception('Excel must have a "Product Name", "Name", or "Medicine ID" column');
+    }
+
+    print('Found columns - productName: $productNameIndex, medicineId: $medicineIdIndex');
+
+    // Parse data rows (skip header)
+    for (int i = 1; i < sheet.rows.length; i++) {
+      final row = sheet.rows[i];
+      if (_isEmptyRow(row)) continue;
+
+      try {
+        String? productName = productNameIndex != null 
+            ? _getCellString(row, productNameIndex) 
+            : null;
+        String? medicineId = medicineIdIndex != null 
+            ? _getCellString(row, medicineIdIndex) 
+            : null;
+
+        if ((productName != null && productName.isNotEmpty) || 
+            (medicineId != null && medicineId.isNotEmpty)) {
+          items.add(DeleteItem(
+            productName: productName,
+            medicineId: medicineId,
+          ));
+        }
+      } catch (e) {
+        print('Error parsing row $i for delete: $e');
+      }
+    }
+
+    print('Parsed ${items.length} delete items from Excel');
+    return items;
+  }
 }
 

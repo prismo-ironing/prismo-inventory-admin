@@ -59,10 +59,14 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
     
     try {
       final nextPage = _currentPage + 1;
+      final apiStatus = _filterStatus == 'all' ? 'all' : _filterStatus;
+      
       final data = await InventoryService.getStoreInventory(
         widget.store.id,
         page: nextPage,
         size: _pageSize,
+        status: apiStatus,
+        // Search is done client-side
       );
       
       final newItems = data['items'] as List<StoreInventoryItem>;
@@ -72,7 +76,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
         _items.addAll(newItems);
         _currentPage = nextPage;
         _pagination = pagination;
-        _applyFilters();
+        _applyClientSideSearch(); // Re-apply search on expanded dataset
         _isLoadingMore = false;
       });
     } catch (e) {
@@ -90,20 +94,26 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
       _isLoading = true;
       _error = null;
       _items = [];
+      _filteredItems = [];
       _currentPage = 0;
     });
 
     try {
+      // Status filter is server-side, search is client-side
+      final apiStatus = _filterStatus == 'all' ? 'all' : _filterStatus;
+      
       final data = await InventoryService.getStoreInventory(
         widget.store.id,
         page: 0,
         size: _pageSize,
+        status: apiStatus,
+        // Search is done client-side for instant results
       );
       setState(() {
         _summary = data['summary'] as InventorySummary;
         _items = data['items'] as List<StoreInventoryItem>;
         _pagination = data['pagination'] as PaginationInfo?;
-        _applyFilters();
+        _applyClientSideSearch(); // Apply any existing search query
         _isLoading = false;
       });
     } catch (e) {
@@ -115,35 +125,13 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
   }
 
   void _applyFilters() {
-    var filtered = _items.where((item) {
-      // Search filter
-      if (_searchQuery.isNotEmpty) {
-        final query = _searchQuery.toLowerCase();
-        if (!item.brandName.toLowerCase().contains(query) &&
-            !(item.genericName?.toLowerCase().contains(query) ?? false) &&
-            !(item.composition?.toLowerCase().contains(query) ?? false) &&
-            !item.medicineId.toLowerCase().contains(query)) {
-          return false;
-        }
-      }
+    // Filters are now applied server-side, so just reload from server
+    _loadInventory();
+  }
 
-      // Status filter
-      if (_filterStatus != 'all') {
-        final isExpired = _isExpired(item.expiryDate);
-        
-        if (_filterStatus == 'in_stock' && (item.stockQuantity <= 0 || isExpired)) return false;
-        if (_filterStatus == 'low_stock' && 
-            (item.stockQuantity > 10 || item.stockQuantity <= 0)) return false;
-        if (_filterStatus == 'out_of_stock' && item.stockQuantity > 0) return false;
-        if (_filterStatus == 'expired' && !isExpired) return false;
-        if (_filterStatus == 'active' && (item.stockQuantity <= 0 || isExpired)) return false;
-      }
-
-      return true;
-    }).toList();
-
-    // Sort
-    filtered.sort((a, b) {
+  void _applySorting() {
+    // Sort is still done client-side for responsiveness
+    _filteredItems.sort((a, b) {
       int compare = 0;
       switch (_sortBy) {
         case 'name':
@@ -161,9 +149,6 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
       }
       return _sortAsc ? compare : -compare;
     });
-
-    _filteredItems = filtered;
-    // Note: Server-side pagination is handled by _loadInventory
   }
 
   @override
@@ -328,6 +313,32 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
     );
   }
 
+  // Search is done client-side on already loaded items for instant results
+  void _onSearchChanged(String value) {
+    setState(() {
+      _searchQuery = value;
+      _applyClientSideSearch();
+    });
+  }
+
+  // Client-side search on already loaded items (instant, no server call)
+  void _applyClientSideSearch() {
+    if (_searchQuery.isEmpty) {
+      _filteredItems = List.from(_items);
+    } else {
+      final query = _searchQuery.toLowerCase();
+      _filteredItems = _items.where((item) {
+        return item.brandName.toLowerCase().contains(query) ||
+            (item.genericName?.toLowerCase().contains(query) ?? false) ||
+            (item.composition?.toLowerCase().contains(query) ?? false) ||
+            item.medicineId.toLowerCase().contains(query) ||
+            (item.manufacturer?.toLowerCase().contains(query) ?? false) ||
+            (item.category?.toLowerCase().contains(query) ?? false);
+      }).toList();
+    }
+    _applySorting();
+  }
+
   Widget _buildSearchAndFilter() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -337,12 +348,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
           Expanded(
             flex: 2,
             child: TextField(
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                  _applyFilters();
-                });
-              },
+              onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: 'Search medicines...',
                 prefixIcon: const Icon(Icons.search),
@@ -375,10 +381,10 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
                 DropdownMenuItem(value: 'expired', child: Text('Expired')),
               ],
               onChanged: (value) {
-                setState(() {
-                  _filterStatus = value ?? 'all';
-                  _applyFilters();
-                });
+                if (_filterStatus != value) {
+                  setState(() => _filterStatus = value ?? 'all');
+                  _loadInventory(); // Reload from server with new filter
+                }
               },
             ),
           ),
@@ -404,7 +410,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
               onChanged: (value) {
                 setState(() {
                   _sortBy = value ?? 'name';
-                  _applyFilters();
+                  _applySorting();
                 });
               },
             ),
@@ -417,7 +423,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
             onPressed: () {
               setState(() {
                 _sortAsc = !_sortAsc;
-                _applyFilters();
+                _applySorting();
               });
             },
             tooltip: _sortAsc ? 'Ascending' : 'Descending',
@@ -504,88 +510,155 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
           Expanded(
             child: SingleChildScrollView(
               controller: _scrollController,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(Colors.grey.shade100),
-                  columnSpacing: 24,
-                  dataRowMinHeight: 48,
-                  dataRowMaxHeight: 56,
-                  columns: const [
-                    DataColumn(label: Text('Medicine')),
-                    DataColumn(label: Text('Category')),
-                    DataColumn(label: Text('Manufacturer')),
-                    DataColumn(label: Text('Form')),
-                    DataColumn(label: Text('Pack Size')),
-                    DataColumn(label: Text('MRP'), numeric: true),
-                    DataColumn(label: Text('Selling Price'), numeric: true),
-                    DataColumn(label: Text('Stock'), numeric: true),
-                    DataColumn(label: Text('Status')),
-                    DataColumn(label: Text('Expiry')),
-                    DataColumn(label: Text('Last Updated')),
-                    DataColumn(label: Text('Actions')),
-                  ],
-                  rows: _filteredItems.map((item) {
-              return DataRow(
-                cells: [
-                  DataCell(
-                    Tooltip(
-                      message: '${item.brandName}\n${item.genericName ?? ""}\n${item.composition ?? ""}',
-                      child: SizedBox(
-                        width: 220,
-                        child: Text(
-                          item.brandName,
-                          style: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 2,
-                        ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      child: DataTable(
+                        headingRowColor: WidgetStateProperty.all(Colors.grey.shade100),
+                        columnSpacing: 12,
+                        dataRowMinHeight: 52,
+                        dataRowMaxHeight: 72,
+                        columns: const [
+                          DataColumn(label: Text('Medicine')),
+                          DataColumn(label: Text('Category')),
+                          DataColumn(label: Text('Manufacturer')),
+                          DataColumn(label: Text('Form')),
+                          DataColumn(label: Text('Pack Size')),
+                          DataColumn(label: Text('MRP'), numeric: true),
+                          DataColumn(label: Text('Selling Price'), numeric: true),
+                          DataColumn(label: Text('Stock'), numeric: true),
+                          DataColumn(label: Text('Status')),
+                          DataColumn(label: Text('Expiry')),
+                          DataColumn(label: Text('Last Updated')),
+                          DataColumn(label: Text('Actions')),
+                        ],
+                        rows: _filteredItems.map((item) {
+                          return DataRow(
+                            cells: [
+                              // Medicine Name - wider, wraps
+                              DataCell(
+                                Tooltip(
+                                  message: '${item.brandName}\n${item.genericName ?? ""}\n${item.composition ?? ""}',
+                                  child: SizedBox(
+                                    width: 160,
+                                    child: Text(
+                                      item.brandName,
+                                      style: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 13),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 2,
+                                      softWrap: true,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Category - wrapped
+                              DataCell(
+                                SizedBox(
+                                  width: 100,
+                                  child: Text(
+                                    item.category ?? '-',
+                                    style: GoogleFonts.inter(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
+                                    softWrap: true,
+                                  ),
+                                ),
+                              ),
+                              // Manufacturer - wrapped
+                              DataCell(
+                                SizedBox(
+                                  width: 120,
+                                  child: Text(
+                                    item.manufacturer ?? '-',
+                                    style: GoogleFonts.inter(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
+                                    softWrap: true,
+                                  ),
+                                ),
+                              ),
+                              // Form - compact
+                              DataCell(
+                                Text(
+                                  item.form ?? '-',
+                                  style: GoogleFonts.inter(fontSize: 12),
+                                ),
+                              ),
+                              // Pack Size - compact
+                              DataCell(
+                                Text(
+                                  item.packSize ?? '-',
+                                  style: GoogleFonts.inter(fontSize: 12),
+                                ),
+                              ),
+                              // MRP
+                              DataCell(
+                                Text(
+                                  '₹${item.mrp?.toStringAsFixed(0) ?? '-'}',
+                                  style: GoogleFonts.inter(fontSize: 12),
+                                ),
+                              ),
+                              // Selling Price
+                              DataCell(
+                                Text(
+                                  '₹${item.sellingPrice.toStringAsFixed(0)}',
+                                  style: GoogleFonts.inter(fontSize: 12),
+                                ),
+                              ),
+                              // Stock
+                              DataCell(
+                                Text(
+                                  '${item.stockQuantity}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                    color: _getStockColor(item.stockQuantity),
+                                  ),
+                                ),
+                              ),
+                              // Status
+                              DataCell(_buildStatusBadge(item.availabilityStatus)),
+                              // Expiry
+                              DataCell(_buildExpiryCell(item.expiryDate)),
+                              // Last Updated
+                              DataCell(
+                                Text(
+                                  _formatDate(item.lastUpdatedAt),
+                                  style: GoogleFonts.inter(fontSize: 11),
+                                ),
+                              ),
+                              // Actions
+                              DataCell(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, size: 16),
+                                      onPressed: () => _showEditDialog(item),
+                                      tooltip: 'Edit',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.delete, size: 16, color: Colors.red.shade400),
+                                      onPressed: () => _confirmDelete(item),
+                                      tooltip: 'Delete',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
                       ),
                     ),
-                  ),
-                  DataCell(Text(item.category ?? '-')),
-                  DataCell(Text(item.manufacturer ?? '-')),
-                  DataCell(Text(item.form ?? '-')),
-                  DataCell(Text(item.packSize ?? '-')),
-                  DataCell(Text('₹${item.mrp?.toStringAsFixed(2) ?? '-'}')),
-                  DataCell(Text('₹${item.sellingPrice.toStringAsFixed(2)}')),
-                  DataCell(
-                    Text(
-                      '${item.stockQuantity}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: _getStockColor(item.stockQuantity),
-                      ),
-                    ),
-                  ),
-                  DataCell(_buildStatusBadge(item.availabilityStatus)),
-                  DataCell(_buildExpiryCell(item.expiryDate)),
-                  DataCell(
-                    Text(
-                      _formatDate(item.lastUpdatedAt),
-                      style: GoogleFonts.inter(fontSize: 12),
-                    ),
-                  ),
-                  DataCell(
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, size: 18),
-                          onPressed: () => _showEditDialog(item),
-                          tooltip: 'Edit',
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.delete, size: 18, color: Colors.red.shade400),
-                          onPressed: () => _confirmDelete(item),
-                          tooltip: 'Delete',
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
-                ),
+                  );
+                },
               ),
             ),
           ),
@@ -766,36 +839,36 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
   }
 
   void _confirmDelete(StoreInventoryItem item) {
+    // Capture scaffold messenger before showing dialog to avoid context issues
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Confirm Delete'),
         content: Text('Are you sure you want to delete ${item.brandName} from inventory?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               final success = await InventoryService.deleteInventoryItem(
                 widget.store.id,
                 item.medicineId,
               );
               if (success) {
-                _loadInventory();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Item deleted successfully')),
-                  );
-                }
+                // Remove item locally instead of full reload
+                _removeItemLocally(item);
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(content: Text('Item deleted successfully')),
+                );
               } else {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Failed to delete item')),
-                  );
-                }
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(content: Text('Failed to delete item')),
+                );
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -804,6 +877,45 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
         ],
       ),
     );
+  }
+
+  /// Remove item from local state without server reload
+  void _removeItemLocally(StoreInventoryItem item) {
+    setState(() {
+      // Remove from both lists
+      _items.removeWhere((i) => i.medicineId == item.medicineId);
+      _filteredItems.removeWhere((i) => i.medicineId == item.medicineId);
+      
+      // Update summary counts
+      if (_summary != null) {
+        final newTotal = _summary!.totalItems - 1;
+        int newInStock = _summary!.inStock;
+        int newLowStock = _summary!.lowStock;
+        int newOutOfStock = _summary!.outOfStock;
+        double newValue = _summary!.totalInventoryValue - (item.sellingPrice * item.stockQuantity);
+        
+        // Adjust counts based on item status
+        switch (item.availabilityStatus.toUpperCase()) {
+          case 'IN_STOCK':
+            newInStock = (newInStock - 1).clamp(0, newTotal);
+            break;
+          case 'LOW_STOCK':
+            newLowStock = (newLowStock - 1).clamp(0, newTotal);
+            break;
+          case 'OUT_OF_STOCK':
+            newOutOfStock = (newOutOfStock - 1).clamp(0, newTotal);
+            break;
+        }
+        
+        _summary = InventorySummary(
+          totalItems: newTotal,
+          inStock: newInStock,
+          lowStock: newLowStock,
+          outOfStock: newOutOfStock,
+          totalInventoryValue: newValue.clamp(0, double.infinity),
+        );
+      }
+    });
   }
 }
 

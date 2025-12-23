@@ -63,9 +63,34 @@ class ApiConfig {
   // Bulk upload endpoint (optimized for large uploads)
   static String get bulkUploadUrl => '$adminInventoryUrl/bulk-upload';
   
-  // Store inventory (with pagination support)
-  static String storeInventoryUrl(String storeId, {int page = 0, int size = 50}) => 
-      '$adminInventoryUrl/store/$storeId?page=$page&size=$size';
+  // Bulk delete endpoint
+  static String get bulkDeleteUrl => '$adminInventoryUrl/bulk-delete';
+  
+  // Bulk deduction endpoint (for reducing stock)
+  static String get deductUrl => '$adminInventoryUrl/deduct';
+  
+  // Single item deduction
+  static String deductSingleUrl(String storeId, String medicineId) => 
+      '$adminInventoryUrl/store/$storeId/$medicineId/deduct';
+  
+  // Delete inventory item
+  static String deleteInventoryItemUrl(String storeId, String medicineId) => 
+      '$adminInventoryUrl/store/$storeId/$medicineId';
+  
+  // Store inventory (with pagination and filtering support)
+  static String storeInventoryUrl(
+    String storeId, {
+    int page = 0,
+    int size = 50,
+    String status = 'all',
+    String? search,
+  }) {
+    var url = '$adminInventoryUrl/store/$storeId?page=$page&size=$size&status=$status';
+    if (search != null && search.isNotEmpty) {
+      url += '&search=${Uri.encodeComponent(search)}';
+    }
+    return url;
+  }
   
   // Store alerts
   static String storeAlertsUrl(String storeId) => '$adminInventoryUrl/store/$storeId/alerts';

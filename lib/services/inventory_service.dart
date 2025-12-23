@@ -58,16 +58,25 @@ class InventoryService {
     }
   }
 
-  /// Get store inventory with pagination
+  /// Get store inventory with pagination and filtering
   /// Returns items for a specific page, plus summary (calculated from all items)
+  /// [status] can be: 'all', 'in_stock', 'low_stock', 'out_of_stock', 'active'
   static Future<Map<String, dynamic>> getStoreInventory(
     String storeId, {
     int page = 0,
     int size = 50,
+    String status = 'all',
+    String? search,
   }) async {
     try {
       final response = await http
-          .get(Uri.parse(ApiConfig.storeInventoryUrl(storeId, page: page, size: size)))
+          .get(Uri.parse(ApiConfig.storeInventoryUrl(
+            storeId, 
+            page: page, 
+            size: size, 
+            status: status,
+            search: search,
+          )))
           .timeout(_inventoryTimeout);
 
       if (response.statusCode == 200) {
@@ -317,7 +326,7 @@ class InventoryService {
   static Future<bool> deleteInventoryItem(String storeId, String medicineId) async {
     try {
       final response = await http
-          .delete(Uri.parse('${ApiConfig.storeInventoryUrl(storeId)}/$medicineId'))
+          .delete(Uri.parse(ApiConfig.deleteInventoryItemUrl(storeId, medicineId)))
           .timeout(_timeout);
 
       if (response.statusCode == 200) {
@@ -328,6 +337,249 @@ class InventoryService {
     } catch (e) {
       print('Error deleting item: $e');
       return false;
+    }
+  }
+
+  // =====================================================
+  // BULK DELETE
+  // =====================================================
+
+  /// Bulk delete inventory items from parsed Excel/CSV data
+  /// [onProgress] callback receives (completed, total, currentBatch, totalBatches)
+  static Future<BulkDeleteResponse> bulkDeleteInventory(
+    String storeId,
+    List<DeleteItem> items, {
+    void Function(int completed, int total, int currentBatch, int totalBatches)? onProgress,
+  }) async {
+    const int batchSize = 1000; // Balanced batch size
+    final int totalItems = items.length;
+    final int totalBatches = (totalItems / batchSize).ceil();
+
+    print('Bulk deleting $totalItems items in $totalBatches batches from store $storeId');
+
+    int successfulDeletes = 0;
+    int notFoundItems = 0;
+    int failedDeletes = 0;
+    List<BulkDeleteError> allErrors = [];
+
+    for (int batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      final int start = batchIndex * batchSize;
+      final int end = (start + batchSize > totalItems) ? totalItems : start + batchSize;
+      final batch = items.sublist(start, end);
+
+      print('Deleting batch ${batchIndex + 1}/$totalBatches (items $start-$end)');
+      onProgress?.call(start, totalItems, batchIndex + 1, totalBatches);
+
+      try {
+        final requestBody = json.encode({
+          'storeId': storeId,
+          'items': batch.map((i) => i.toJson()).toList(),
+        });
+
+        final response = await http
+            .post(
+              Uri.parse(ApiConfig.bulkDeleteUrl),
+              headers: {'Content-Type': 'application/json'},
+              body: requestBody,
+            )
+            .timeout(const Duration(seconds: 300)); // 5 min timeout for bulk delete
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          successfulDeletes += (data['successfulDeletes'] as int? ?? 0);
+          notFoundItems += (data['notFoundItems'] as int? ?? 0);
+          failedDeletes += (data['failedDeletes'] as int? ?? 0);
+
+          if (data['errors'] != null) {
+            final errors = (data['errors'] as List)
+                .map((e) => BulkDeleteError.fromJson(e as Map<String, dynamic>))
+                .toList();
+            allErrors.addAll(errors);
+          }
+          print('Batch ${batchIndex + 1} completed successfully');
+        } else {
+          print('Batch ${batchIndex + 1} failed: ${response.statusCode}');
+          failedDeletes += batch.length;
+          allErrors.add(BulkDeleteError(
+            productName: 'Batch ${batchIndex + 1}',
+            error: 'Failed with status ${response.statusCode}',
+          ));
+        }
+      } catch (e) {
+        print('Error deleting batch ${batchIndex + 1}: $e');
+        failedDeletes += batch.length;
+        allErrors.add(BulkDeleteError(
+          productName: 'Batch ${batchIndex + 1}',
+          error: 'Error: $e',
+        ));
+      }
+    }
+
+    onProgress?.call(totalItems, totalItems, totalBatches, totalBatches);
+
+    return BulkDeleteResponse(
+      success: failedDeletes == 0,
+      message:
+          'Bulk delete completed: $successfulDeletes deleted, $notFoundItems not found${failedDeletes > 0 ? ", $failedDeletes failed" : ""}',
+      totalItems: totalItems,
+      successfulDeletes: successfulDeletes,
+      notFoundItems: notFoundItems,
+      failedDeletes: failedDeletes,
+      errors: allErrors,
+    );
+  }
+
+  // =====================================================
+  // BULK DEDUCTION (Reduce Stock)
+  // =====================================================
+
+  /// Deduct inventory from parsed Excel/CSV data with batching for large files
+  /// Similar to uploadInventory but SUBTRACTS stock instead of adding
+  /// [onProgress] callback receives (completed, total, currentBatch, totalBatches)
+  static Future<DeductionResponse> deductInventory(
+    String storeId,
+    List<DeductionItem> items, {
+    bool removeZeroStockItems = false,
+    void Function(int completed, int total, int currentBatch, int totalBatches)? onProgress,
+  }) async {
+    const int batchSize = 500; // Smaller batches for deduction (more validation per item)
+    final int totalItems = items.length;
+    final int totalBatches = (totalItems / batchSize).ceil();
+
+    print('Deducting $totalItems items in $totalBatches batches from store $storeId');
+
+    // Aggregate results across batches
+    int successfulDeductions = 0;
+    int itemsSetToZero = 0;
+    int itemsRemoved = 0;
+    int failedItems = 0;
+    int skippedItems = 0;
+    List<DeductionResult> allResults = [];
+    List<DeductionError> allErrors = [];
+
+    for (int batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      final int start = batchIndex * batchSize;
+      final int end = (start + batchSize > totalItems) ? totalItems : start + batchSize;
+      final batch = items.sublist(start, end);
+
+      print('Deducting batch ${batchIndex + 1}/$totalBatches (items $start-$end)');
+      onProgress?.call(start, totalItems, batchIndex + 1, totalBatches);
+
+      try {
+        final requestBody = json.encode({
+          'storeId': storeId,
+          'removeZeroStockItems': removeZeroStockItems,
+          'items': batch.map((i) => i.toJson()).toList(),
+        });
+
+        final response = await http
+            .post(
+              Uri.parse(ApiConfig.deductUrl),
+              headers: {'Content-Type': 'application/json'},
+              body: requestBody,
+            )
+            .timeout(const Duration(seconds: 120)); // 2 min timeout
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          successfulDeductions += (data['successfulDeductions'] as int? ?? 0);
+          itemsSetToZero += (data['itemsSetToZero'] as int? ?? 0);
+          itemsRemoved += (data['itemsRemoved'] as int? ?? 0);
+          failedItems += (data['failedItems'] as int? ?? 0);
+          skippedItems += (data['skippedItems'] as int? ?? 0);
+
+          if (data['results'] != null) {
+            final results = (data['results'] as List)
+                .map((e) => DeductionResult.fromJson(e as Map<String, dynamic>))
+                .toList();
+            allResults.addAll(results);
+          }
+          if (data['errors'] != null) {
+            final errors = (data['errors'] as List)
+                .map((e) => DeductionError.fromJson(e as Map<String, dynamic>))
+                .toList();
+            allErrors.addAll(errors);
+          }
+          print('Batch ${batchIndex + 1} completed successfully');
+        } else {
+          print('Batch ${batchIndex + 1} failed: ${response.statusCode}');
+          failedItems += batch.length;
+          allErrors.add(DeductionError(
+            errorMessage: 'Batch ${batchIndex + 1} failed with status ${response.statusCode}',
+            errorCode: 'BATCH_FAILED',
+          ));
+        }
+      } catch (e) {
+        print('Error deducting batch ${batchIndex + 1}: $e');
+        failedItems += batch.length;
+        allErrors.add(DeductionError(
+          errorMessage: 'Batch ${batchIndex + 1} failed: $e',
+          errorCode: 'BATCH_ERROR',
+        ));
+      }
+    }
+
+    onProgress?.call(totalItems, totalItems, totalBatches, totalBatches);
+
+    return DeductionResponse(
+      success: failedItems == 0,
+      message:
+          'Deduction completed. $successfulDeductions successful, $itemsSetToZero set to zero, $itemsRemoved removed${failedItems > 0 ? ", $failedItems failed" : ""}${skippedItems > 0 ? ", $skippedItems skipped" : ""}',
+      totalItems: totalItems,
+      successfulDeductions: successfulDeductions,
+      itemsSetToZero: itemsSetToZero,
+      itemsRemoved: itemsRemoved,
+      failedItems: failedItems,
+      skippedItems: skippedItems,
+      results: allResults,
+      errors: allErrors,
+    );
+  }
+
+  /// Deduct stock for a single item (quick deduction without Excel)
+  static Future<Map<String, dynamic>> deductSingleItem(
+    String storeId,
+    String medicineId,
+    int quantity, {
+    String? reason,
+  }) async {
+    try {
+      var uri = Uri.parse(ApiConfig.deductSingleUrl(storeId, medicineId));
+      uri = uri.replace(queryParameters: {
+        'quantity': quantity.toString(),
+        if (reason != null) 'reason': reason,
+      });
+
+      final response = await http
+          .post(uri, headers: {'Content-Type': 'application/json'})
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else if (response.statusCode == 400) {
+        final data = json.decode(response.body);
+        return {
+          'success': false,
+          'error': data['error'] ?? 'Bad request',
+          'availableStock': data['availableStock'],
+          'requestedDeduction': data['requestedDeduction'],
+        };
+      } else if (response.statusCode == 404) {
+        return {
+          'success': false,
+          'error': 'Medicine not found in store inventory',
+        };
+      }
+      return {
+        'success': false,
+        'error': 'Request failed with status ${response.statusCode}',
+      };
+    } catch (e) {
+      print('Error deducting single item: $e');
+      return {
+        'success': false,
+        'error': 'Network error: $e',
+      };
     }
   }
 }

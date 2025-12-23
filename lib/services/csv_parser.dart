@@ -286,5 +286,73 @@ class CsvParser {
 
     return double.tryParse(value);
   }
+
+  /// Parse CSV file bytes into delete items (just product names)
+  /// Expects a simple CSV with at least a "product_name" or "name" column
+  static List<DeleteItem> parseDeleteCsv(Uint8List bytes) {
+    final String content = utf8.decode(bytes);
+    final List<DeleteItem> items = [];
+
+    // Split into lines
+    final lines = content.split(RegExp(r'\r?\n'));
+    if (lines.isEmpty) {
+      throw Exception('Empty CSV file');
+    }
+
+    // Detect delimiter (tab or comma)
+    final delimiter = _detectDelimiter(lines.first);
+    print('Delete CSV - Detected delimiter: ${delimiter == '\t' ? 'TAB' : 'COMMA'}');
+
+    // Parse header row
+    final headerRow = _parseCsvLine(lines.first, delimiter);
+    int? productNameIndex;
+    int? medicineIdIndex;
+
+    for (int i = 0; i < headerRow.length; i++) {
+      final header = headerRow[i].toLowerCase().trim();
+      if (header == 'product_name' || header.contains('product name') || 
+          header == 'name' || header == 'medicine' || header == 'medicine name') {
+        productNameIndex = i;
+      }
+      if (header == 'medicine_id' || header.contains('medicine id') || header == 'id') {
+        medicineIdIndex = i;
+      }
+    }
+
+    if (productNameIndex == null && medicineIdIndex == null) {
+      throw Exception('CSV must have a "product_name", "name", or "medicine_id" column');
+    }
+
+    print('Found columns - productName: $productNameIndex, medicineId: $medicineIdIndex');
+
+    // Parse data rows (skip header)
+    for (int i = 1; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty) continue;
+
+      try {
+        final row = _parseCsvLine(line, delimiter);
+        String? productName = productNameIndex != null && productNameIndex < row.length 
+            ? row[productNameIndex].trim() 
+            : null;
+        String? medicineId = medicineIdIndex != null && medicineIdIndex < row.length 
+            ? row[medicineIdIndex].trim() 
+            : null;
+
+        if ((productName != null && productName.isNotEmpty) || 
+            (medicineId != null && medicineId.isNotEmpty)) {
+          items.add(DeleteItem(
+            productName: productName?.isNotEmpty == true ? productName : null,
+            medicineId: medicineId?.isNotEmpty == true ? medicineId : null,
+          ));
+        }
+      } catch (e) {
+        print('Error parsing row $i for delete: $e');
+      }
+    }
+
+    print('Parsed ${items.length} delete items from CSV');
+    return items;
+  }
 }
 

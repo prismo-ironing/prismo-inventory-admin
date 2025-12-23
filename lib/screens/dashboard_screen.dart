@@ -7,6 +7,7 @@ import '../providers/auth_providers.dart';
 import 'upload_screen.dart';
 import 'inventory_view_screen.dart';
 import 'login_screen.dart';
+import 'bulk_delete_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -915,6 +916,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 () => _showStoreSelector(false),
               ),
             ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionCard(
+                'Remove Items',
+                'Remove items from store inventory',
+                Icons.remove_circle_outline,
+                const Color(0xFF00897B), // Teal - less aggressive
+                () => _navigateToBulkDelete(),
+              ),
+            ),
           ],
         ),
       ],
@@ -1180,6 +1191,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => UploadScreen(
+          stores: _filteredStores,
+          preselectedStore: preselectedStore,
+        ),
+      ),
+    ).then((_) => _loadData());
+  }
+
+  void _navigateToBulkDelete({Store? preselectedStore}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BulkDeleteScreen(
           stores: _filteredStores,
           preselectedStore: preselectedStore,
         ),

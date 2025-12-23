@@ -6,31 +6,31 @@ import '../services/excel_parser.dart';
 import '../services/csv_parser.dart';
 import '../services/inventory_service.dart';
 
-class UploadScreen extends StatefulWidget {
+class BulkDeleteScreen extends StatefulWidget {
   final List<Store> stores;
   final Store? preselectedStore;
 
-  const UploadScreen({
+  const BulkDeleteScreen({
     super.key,
     required this.stores,
     this.preselectedStore,
   });
 
   @override
-  State<UploadScreen> createState() => _UploadScreenState();
+  State<BulkDeleteScreen> createState() => _BulkDeleteScreenState();
 }
 
-class _UploadScreenState extends State<UploadScreen> {
+class _BulkDeleteScreenState extends State<BulkDeleteScreen> {
   Store? _selectedStore;
-  List<InventoryItem>? _parsedItems;
+  List<InventoryItem>? _parsedItems; // Use InventoryItem like upload screen
   String? _fileName;
   bool _isLoading = false;
-  bool _isUploading = false;
-  UploadResponse? _uploadResponse;
+  bool _isDeleting = false;
+  BulkDeleteResponse? _deleteResponse;
   String? _error;
-  
-  // Progress tracking for batch uploads
-  int _uploadedItems = 0;
+
+  // Progress tracking
+  int _processedItems = 0;
   int _totalItems = 0;
   int _currentBatch = 0;
   int _totalBatches = 0;
@@ -47,7 +47,7 @@ class _UploadScreenState extends State<UploadScreen> {
         _isLoading = true;
         _error = null;
         _parsedItems = null;
-        _uploadResponse = null;
+        _deleteResponse = null;
       });
 
       final result = await FilePicker.platform.pickFiles(
@@ -60,19 +60,17 @@ class _UploadScreenState extends State<UploadScreen> {
         final file = result.files.first;
         if (file.bytes != null) {
           _fileName = file.name;
-          
-          // Parse based on file type
+
+          // Use same parsers as upload screen for full preview
           List<InventoryItem> items;
           final extension = file.name.toLowerCase().split('.').last;
-          
+
           if (extension == 'csv') {
-            // Parse CSV
             items = CsvParser.parseCsv(file.bytes!);
           } else {
-            // Parse Excel
             items = ExcelParser.parseExcel(file.bytes!);
           }
-          
+
           setState(() {
             _parsedItems = items;
             _isLoading = false;
@@ -91,26 +89,31 @@ class _UploadScreenState extends State<UploadScreen> {
     }
   }
 
-  Future<void> _uploadInventory() async {
+  Future<void> _bulkDelete() async {
     if (_selectedStore == null || _parsedItems == null) return;
 
     setState(() {
-      _isUploading = true;
+      _isDeleting = true;
       _error = null;
-      _uploadedItems = 0;
+      _processedItems = 0;
       _totalItems = _parsedItems!.length;
       _currentBatch = 0;
       _totalBatches = (_parsedItems!.length / 500).ceil();
     });
 
     try {
-      final response = await InventoryService.uploadInventory(
+      // Convert InventoryItem to DeleteItem for the API
+      final deleteItems = _parsedItems!
+          .map((item) => DeleteItem(productName: item.productName))
+          .toList();
+
+      final response = await InventoryService.bulkDeleteInventory(
         _selectedStore!.id,
-        _parsedItems!,
+        deleteItems,
         onProgress: (completed, total, currentBatch, totalBatches) {
           if (mounted) {
             setState(() {
-              _uploadedItems = completed;
+              _processedItems = completed;
               _totalItems = total;
               _currentBatch = currentBatch;
               _totalBatches = totalBatches;
@@ -121,15 +124,15 @@ class _UploadScreenState extends State<UploadScreen> {
 
       if (mounted) {
         setState(() {
-          _uploadResponse = response;
-          _isUploading = false;
+          _deleteResponse = response;
+          _isDeleting = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Upload failed: $e';
-          _isUploading = false;
+          _error = 'Bulk delete failed: $e';
+          _isDeleting = false;
         });
       }
     }
@@ -140,7 +143,7 @@ class _UploadScreenState extends State<UploadScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text('Upload Inventory'),
+        title: const Text('Remove from Inventory'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -151,11 +154,49 @@ class _UploadScreenState extends State<UploadScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Info banner - less dramatic
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, color: Colors.amber.shade700, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Remove Items from Store Inventory',
+                          style: GoogleFonts.inter(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'This removes items from the selected store\'s inventory only. The medicines remain in the global catalog for other stores.',
+                          style: TextStyle(color: Colors.amber.shade700, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
             // Step 1: Select Store
             _buildStepCard(
               step: 1,
               title: 'Select Store',
-              subtitle: 'Choose the store for inventory update',
+              subtitle: 'Choose the store to delete inventory from',
               icon: Icons.store,
               isCompleted: _selectedStore != null,
               child: _buildStoreSelector(),
@@ -165,8 +206,8 @@ class _UploadScreenState extends State<UploadScreen> {
             // Step 2: Upload File
             _buildStepCard(
               step: 2,
-              title: 'Upload Excel File',
-              subtitle: 'Select the inventory Excel sheet',
+              title: 'Upload Delete List',
+              subtitle: 'Select Excel/CSV file with items to delete',
               icon: Icons.upload_file,
               isCompleted: _parsedItems != null,
               child: _buildFileUploader(),
@@ -177,8 +218,8 @@ class _UploadScreenState extends State<UploadScreen> {
             if (_parsedItems != null) ...[
               _buildStepCard(
                 step: 3,
-                title: 'Preview Data',
-                subtitle: '${_parsedItems!.length} items found',
+                title: 'Preview Items to Delete',
+                subtitle: '${_parsedItems!.length} items will be deleted',
                 icon: Icons.preview,
                 isCompleted: _parsedItems != null,
                 child: _buildPreviewTable(),
@@ -186,15 +227,15 @@ class _UploadScreenState extends State<UploadScreen> {
               const SizedBox(height: 24),
             ],
 
-            // Step 4: Upload
+            // Step 4: Confirm Delete
             if (_parsedItems != null && _selectedStore != null) ...[
               _buildStepCard(
                 step: 4,
-                title: 'Confirm Upload',
-                subtitle: 'Upload inventory to ${_selectedStore!.name}',
-                icon: Icons.cloud_upload,
-                isCompleted: _uploadResponse != null && _uploadResponse!.success,
-                child: _buildUploadSection(),
+                title: 'Confirm Bulk Delete',
+                subtitle: 'Delete ${_parsedItems!.length} items from ${_selectedStore!.name}',
+                icon: Icons.delete_forever,
+                isCompleted: _deleteResponse != null && _deleteResponse!.success,
+                child: _buildDeleteSection(),
               ),
             ],
 
@@ -221,10 +262,10 @@ class _UploadScreenState extends State<UploadScreen> {
               ),
             ],
 
-            // Upload response
-            if (_uploadResponse != null) ...[
+            // Delete response
+            if (_deleteResponse != null) ...[
               const SizedBox(height: 24),
-              _buildUploadResponse(),
+              _buildDeleteResponse(),
             ],
           ],
         ),
@@ -240,6 +281,9 @@ class _UploadScreenState extends State<UploadScreen> {
     required bool isCompleted,
     required Widget child,
   }) {
+    // Use professional teal color instead of aggressive red
+    const primaryColor = Color(0xFF00897B); // Teal
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -253,8 +297,8 @@ class _UploadScreenState extends State<UploadScreen> {
                   height: 40,
                   decoration: BoxDecoration(
                     color: isCompleted
-                        ? const Color(0xFF4CAF50)
-                        : const Color(0xFF0D47A1).withOpacity(0.1),
+                        ? primaryColor
+                        : primaryColor.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Center(
@@ -264,7 +308,7 @@ class _UploadScreenState extends State<UploadScreen> {
                             '$step',
                             style: GoogleFonts.inter(
                               fontWeight: FontWeight.w600,
-                              color: const Color(0xFF0D47A1),
+                              color: primaryColor,
                             ),
                           ),
                   ),
@@ -329,6 +373,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   Widget _buildFileUploader() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InkWell(
           onTap: _isLoading ? null : _pickFile,
@@ -351,13 +396,13 @@ class _UploadScreenState extends State<UploadScreen> {
                   const CircularProgressIndicator()
                 else ...[
                   Icon(
-                    Icons.cloud_upload_outlined,
+                    Icons.upload_file,
                     size: 48,
                     color: Colors.grey.shade400,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    _fileName ?? 'Click to select Excel file',
+                    _fileName ?? 'Click to select file',
                     style: GoogleFonts.inter(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
@@ -375,6 +420,34 @@ class _UploadScreenState extends State<UploadScreen> {
                 ],
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'File Format:',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue.shade700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Use the same file format as inventory upload. Items will be matched by "Product Name" column.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.blue.shade600,
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -458,79 +531,40 @@ class _UploadScreenState extends State<UploadScreen> {
     );
   }
 
-  Widget _tableHeader(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      child: Text(
-        text,
-        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _tableCell(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      child: Text(
-        text,
-        style: GoogleFonts.inter(fontSize: 12),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
-
-  Widget _tableCellBold(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      child: Tooltip(
-        message: text,
-        child: Text(
-          text,
-          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUploadSection() {
-    // Show success state if upload completed successfully
-    if (_uploadResponse != null && _uploadResponse!.success) {
+  Widget _buildDeleteSection() {
+    if (_deleteResponse != null && _deleteResponse!.success) {
       return _buildSuccessState();
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Show info banner only if not uploaded yet
-        if (_uploadResponse == null)
+        if (_deleteResponse == null)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
+              color: Colors.teal.shade50,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline, color: Colors.blue.shade700),
+                Icon(Icons.inventory_2_outlined, color: Colors.teal.shade700),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Ready to upload',
+                        'Ready to remove from inventory',
                         style: GoogleFonts.inter(
                           fontWeight: FontWeight.w600,
-                          color: Colors.blue.shade700,
+                          color: Colors.teal.shade700,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${_parsedItems!.length} items will be uploaded to ${_selectedStore!.name}',
-                        style: TextStyle(color: Colors.blue.shade700),
+                        '${_parsedItems!.length} items will be removed from ${_selectedStore!.name}\'s inventory',
+                        style: TextStyle(color: Colors.teal.shade600, fontSize: 13),
                       ),
                     ],
                   ),
@@ -538,9 +572,10 @@ class _UploadScreenState extends State<UploadScreen> {
               ],
             ),
           ),
-        if (_uploadResponse == null) const SizedBox(height: 20),
-        // Progress indicator when uploading
-        if (_isUploading) ...[
+        if (_deleteResponse == null) const SizedBox(height: 20),
+
+        // Progress indicator when deleting
+        if (_isDeleting) ...[
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -563,7 +598,7 @@ class _UploadScreenState extends State<UploadScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Uploading batch $_currentBatch of $_totalBatches...',
+                            'Processing batch $_currentBatch of $_totalBatches...',
                             style: GoogleFonts.inter(
                               fontWeight: FontWeight.w600,
                               color: Colors.blue.shade800,
@@ -571,7 +606,7 @@ class _UploadScreenState extends State<UploadScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '$_uploadedItems / $_totalItems items processed',
+                            '$_processedItems / $_totalItems items processed',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               color: Colors.blue.shade600,
@@ -584,22 +619,24 @@ class _UploadScreenState extends State<UploadScreen> {
                 ),
                 const SizedBox(height: 12),
                 LinearProgressIndicator(
-                  value: _totalItems > 0 ? _uploadedItems / _totalItems : 0,
+                  value: _totalItems > 0 ? _processedItems / _totalItems : 0,
                   backgroundColor: Colors.blue.shade100,
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
                 ),
               ],
             ),
           ),
-        ] else if (_uploadResponse == null) ...[
+        ] else if (_deleteResponse == null) ...[
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _uploadInventory,
-              icon: const Icon(Icons.cloud_upload),
-              label: const Text('Upload Inventory'),
+              onPressed: _bulkDelete,
+              icon: const Icon(Icons.remove_circle_outline),
+              label: const Text('Remove from Inventory'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: const Color(0xFF00897B), // Teal
+                foregroundColor: Colors.white,
               ),
             ),
           ),
@@ -609,7 +646,7 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Widget _buildSuccessState() {
-    final response = _uploadResponse!;
+    final response = _deleteResponse!;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -619,7 +656,6 @@ class _UploadScreenState extends State<UploadScreen> {
       ),
       child: Column(
         children: [
-          // Animated success icon
           TweenAnimationBuilder<double>(
             tween: Tween(begin: 0.0, end: 1.0),
             duration: const Duration(milliseconds: 500),
@@ -652,50 +688,49 @@ class _UploadScreenState extends State<UploadScreen> {
           ),
           const SizedBox(height: 20),
           Text(
-            'Upload Successful!',
+            'Items Removed Successfully',
             style: GoogleFonts.inter(
-              fontSize: 24,
+              fontSize: 22,
               fontWeight: FontWeight.w700,
               color: Colors.green.shade700,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'All ${response.totalItems} items processed successfully',
+            response.message,
             style: GoogleFonts.inter(
               fontSize: 16,
               color: Colors.green.shade600,
             ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          // Stats row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildStatColumn('New', response.newMedicinesAdded, Icons.add_circle_outline, Colors.blue),
-              _buildStatColumn('Updated', response.existingMedicinesUpdated, Icons.update, Colors.teal),
-              _buildStatColumn('Inventory', response.inventoryItemsCreated + response.inventoryItemsUpdated, Icons.inventory_2, Colors.green),
+              _buildStatColumn('Removed', response.successfulDeletes, Icons.check_circle_outline, Colors.green),
+              _buildStatColumn('Not Found', response.notFoundItems, Icons.search_off, Colors.orange),
+              _buildStatColumn('Failed', response.failedDeletes, Icons.error_outline, Colors.red),
             ],
           ),
           const SizedBox(height: 24),
-          // Action buttons
           Row(
             children: [
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
                     setState(() {
-                      _uploadResponse = null;
+                      _deleteResponse = null;
                       _parsedItems = null;
                       _fileName = null;
                     });
                   },
                   icon: const Icon(Icons.upload_file),
-                  label: const Text('Upload Another'),
+                  label: const Text('Remove More'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    foregroundColor: Colors.green.shade700,
-                    side: BorderSide(color: Colors.green.shade300),
+                    foregroundColor: Colors.teal.shade700,
+                    side: BorderSide(color: Colors.teal.shade300),
                   ),
                 ),
               ),
@@ -743,8 +778,8 @@ class _UploadScreenState extends State<UploadScreen> {
     );
   }
 
-  Widget _buildUploadResponse() {
-    final response = _uploadResponse!;
+  Widget _buildDeleteResponse() {
+    final response = _deleteResponse!;
     final isSuccess = response.success;
 
     return Card(
@@ -767,7 +802,7 @@ class _UploadScreenState extends State<UploadScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isSuccess ? 'Upload Successful!' : 'Upload Completed with Issues',
+                        isSuccess ? 'Items Removed' : 'Completed with Issues',
                         style: GoogleFonts.inter(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -791,12 +826,10 @@ class _UploadScreenState extends State<UploadScreen> {
               runSpacing: 12,
               children: [
                 _buildResultChip('Total Items', '${response.totalItems}', Colors.grey),
-                _buildResultChip('New Medicines', '${response.newMedicinesAdded}', Colors.blue),
-                _buildResultChip('Updated Medicines', '${response.existingMedicinesUpdated}', Colors.teal),
-                _buildResultChip('Inventory Created', '${response.inventoryItemsCreated}', Colors.green),
-                _buildResultChip('Inventory Updated', '${response.inventoryItemsUpdated}', Colors.orange),
-                if (response.failedItems > 0)
-                  _buildResultChip('Failed', '${response.failedItems}', Colors.red),
+                _buildResultChip('Deleted', '${response.successfulDeletes}', Colors.green),
+                _buildResultChip('Not Found', '${response.notFoundItems}', Colors.orange),
+                if (response.failedDeletes > 0)
+                  _buildResultChip('Failed', '${response.failedDeletes}', Colors.red),
               ],
             ),
             if (response.errors.isNotEmpty) ...[
@@ -812,7 +845,7 @@ class _UploadScreenState extends State<UploadScreen> {
               ...response.errors.take(5).map((error) => Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
-                      '• ${error.productName ?? 'Item ${error.serialNo}'}: ${error.errorMessage}',
+                      '• ${error.productName ?? "Unknown"}: ${error.error}',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.red.shade600,
@@ -850,7 +883,7 @@ class _UploadScreenState extends State<UploadScreen> {
             value,
             style: GoogleFonts.inter(
               fontWeight: FontWeight.w700,
-              color: color.shade700,
+              color: _getShade700(color),
             ),
           ),
           const SizedBox(width: 6),
@@ -858,22 +891,57 @@ class _UploadScreenState extends State<UploadScreen> {
             label,
             style: GoogleFonts.inter(
               fontSize: 13,
-              color: color.shade600,
+              color: _getShade600(color),
             ),
           ),
         ],
       ),
     );
   }
-}
 
-extension ColorShade on Color {
-  Color get shade700 {
-    return HSLColor.fromColor(this).withLightness(0.35).toColor();
+  Color _getShade700(Color color) {
+    return HSLColor.fromColor(color).withLightness(0.35).toColor();
   }
 
-  Color get shade600 {
-    return HSLColor.fromColor(this).withLightness(0.45).toColor();
+  Color _getShade600(Color color) {
+    return HSLColor.fromColor(color).withLightness(0.45).toColor();
+  }
+
+  Widget _tableHeader(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      child: Text(
+        text,
+        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Widget _tableCell(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Text(
+        text,
+        style: GoogleFonts.inter(fontSize: 12),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _tableCellBold(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Tooltip(
+        message: text,
+        child: Text(
+          text,
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
   }
 }
 
