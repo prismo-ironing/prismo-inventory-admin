@@ -63,8 +63,9 @@ class ApiConfig {
   // Bulk upload endpoint (optimized for large uploads)
   static String get bulkUploadUrl => '$adminInventoryUrl/bulk-upload';
   
-  // Store inventory
-  static String storeInventoryUrl(String storeId) => '$adminInventoryUrl/store/$storeId';
+  // Store inventory (with pagination support)
+  static String storeInventoryUrl(String storeId, {int page = 0, int size = 50}) => 
+      '$adminInventoryUrl/store/$storeId?page=$page&size=$size';
   
   // Store alerts
   static String storeAlertsUrl(String storeId) => '$adminInventoryUrl/store/$storeId/alerts';

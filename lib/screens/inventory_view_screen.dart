@@ -14,6 +14,7 @@ class InventoryViewScreen extends StatefulWidget {
 
 class _InventoryViewScreenState extends State<InventoryViewScreen> {
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   String? _error;
   InventorySummary? _summary;
   List<StoreInventoryItem> _items = [];
@@ -23,21 +24,12 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
   String _sortBy = 'name';
   bool _sortAsc = true;
   
-  // Pagination
+  // Server-side pagination
   static const int _pageSize = 50;
   int _currentPage = 0;
-  bool _hasMoreItems = true;
+  PaginationInfo? _pagination;
+  bool get _hasMoreItems => _pagination?.hasNext ?? false;
   final ScrollController _scrollController = ScrollController();
-  
-  List<StoreInventoryItem> get _visibleItems {
-    final endIndex = (_currentPage + 1) * _pageSize;
-    if (endIndex >= _filteredItems.length) {
-      _hasMoreItems = false;
-      return _filteredItems;
-    }
-    _hasMoreItems = true;
-    return _filteredItems.sublist(0, endIndex);
-  }
 
   @override
   void initState() {
@@ -54,10 +46,41 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
   
   void _onScroll() {
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      if (_hasMoreItems && !_isLoading) {
-        setState(() {
-          _currentPage++;
-        });
+      if (_hasMoreItems && !_isLoading && !_isLoadingMore) {
+        _loadMoreItems();
+      }
+    }
+  }
+
+  Future<void> _loadMoreItems() async {
+    if (_isLoadingMore || !_hasMoreItems) return;
+    
+    setState(() => _isLoadingMore = true);
+    
+    try {
+      final nextPage = _currentPage + 1;
+      final data = await InventoryService.getStoreInventory(
+        widget.store.id,
+        page: nextPage,
+        size: _pageSize,
+      );
+      
+      final newItems = data['items'] as List<StoreInventoryItem>;
+      final pagination = data['pagination'] as PaginationInfo?;
+      
+      setState(() {
+        _items.addAll(newItems);
+        _currentPage = nextPage;
+        _pagination = pagination;
+        _applyFilters();
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingMore = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading more: $e')),
+        );
       }
     }
   }
@@ -66,14 +89,20 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _items = [];
+      _currentPage = 0;
     });
 
     try {
-      final data = await InventoryService.getStoreInventory(widget.store.id);
+      final data = await InventoryService.getStoreInventory(
+        widget.store.id,
+        page: 0,
+        size: _pageSize,
+      );
       setState(() {
         _summary = data['summary'] as InventorySummary;
         _items = data['items'] as List<StoreInventoryItem>;
-        _currentPage = 0; // Reset pagination
+        _pagination = data['pagination'] as PaginationInfo?;
         _applyFilters();
         _isLoading = false;
       });
@@ -134,7 +163,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
     });
 
     _filteredItems = filtered;
-    _currentPage = 0; // Reset pagination when filters change
+    // Note: Server-side pagination is handled by _loadInventory
   }
 
   @override
@@ -414,7 +443,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
   }
 
   Widget _buildItemsList() {
-    if (_filteredItems.isEmpty) {
+    if (_filteredItems.isEmpty && !_isLoading) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -433,7 +462,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
       );
     }
 
-    final visibleItems = _visibleItems;
+    final totalServerItems = _pagination?.totalItems ?? _summary?.totalItems ?? _filteredItems.length;
     
     return Card(
       margin: const EdgeInsets.all(16),
@@ -447,15 +476,28 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Showing ${visibleItems.length} of ${_filteredItems.length} items',
+                  'Showing ${_filteredItems.length} of $totalServerItems items',
                   style: GoogleFonts.inter(fontSize: 12, color: Colors.blue.shade700),
                 ),
-                if (_hasMoreItems)
-                  TextButton.icon(
-                    onPressed: () => setState(() => _currentPage++),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Load More'),
-                  ),
+                Row(
+                  children: [
+                    if (_isLoadingMore)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    if (_hasMoreItems && !_isLoadingMore)
+                      TextButton.icon(
+                        onPressed: _loadMoreItems,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Load More'),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -483,7 +525,7 @@ class _InventoryViewScreenState extends State<InventoryViewScreen> {
                     DataColumn(label: Text('Last Updated')),
                     DataColumn(label: Text('Actions')),
                   ],
-                  rows: visibleItems.map((item) {
+                  rows: _filteredItems.map((item) {
               return DataRow(
                 cells: [
                   DataCell(

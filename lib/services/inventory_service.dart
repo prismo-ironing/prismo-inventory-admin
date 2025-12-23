@@ -5,6 +5,7 @@ import '../models/inventory_item.dart';
 
 class InventoryService {
   static const Duration _timeout = Duration(seconds: 10); // Reduced timeout for faster failure
+  static const Duration _inventoryTimeout = Duration(seconds: 30); // Longer timeout for inventory
 
   /// Get all stores
   static Future<List<Store>> getStores() async {
@@ -57,12 +58,17 @@ class InventoryService {
     }
   }
 
-  /// Get store inventory
-  static Future<Map<String, dynamic>> getStoreInventory(String storeId) async {
+  /// Get store inventory with pagination
+  /// Returns items for a specific page, plus summary (calculated from all items)
+  static Future<Map<String, dynamic>> getStoreInventory(
+    String storeId, {
+    int page = 0,
+    int size = 50,
+  }) async {
     try {
       final response = await http
-          .get(Uri.parse(ApiConfig.storeInventoryUrl(storeId)))
-          .timeout(_timeout);
+          .get(Uri.parse(ApiConfig.storeInventoryUrl(storeId, page: page, size: size)))
+          .timeout(_inventoryTimeout);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -71,9 +77,14 @@ class InventoryService {
           final items = (data['items'] as List)
               .map((i) => StoreInventoryItem.fromJson(i as Map<String, dynamic>))
               .toList();
+          
+          // Parse pagination info if available
+          final paginationData = data['pagination'] as Map<String, dynamic>?;
+          
           return {
             'summary': summary,
             'items': items,
+            'pagination': paginationData != null ? PaginationInfo.fromJson(paginationData) : null,
           };
         }
       }
@@ -82,6 +93,36 @@ class InventoryService {
       print('Error fetching inventory: $e');
       rethrow;
     }
+  }
+
+  /// Get all store inventory items (fetches all pages)
+  /// Use this only when you need ALL items (e.g., for stats calculation)
+  static Future<Map<String, dynamic>> getAllStoreInventory(String storeId) async {
+    List<StoreInventoryItem> allItems = [];
+    InventorySummary? summary;
+    int page = 0;
+    const int size = 100; // Larger page size for bulk fetching
+    bool hasMore = true;
+
+    while (hasMore) {
+      final result = await getStoreInventory(storeId, page: page, size: size);
+      summary = result['summary'] as InventorySummary;
+      final items = result['items'] as List<StoreInventoryItem>;
+      final pagination = result['pagination'] as PaginationInfo?;
+      
+      allItems.addAll(items);
+      
+      hasMore = pagination?.hasNext ?? false;
+      page++;
+      
+      // Safety: don't fetch more than 50 pages (5000 items)
+      if (page > 50) break;
+    }
+
+    return {
+      'summary': summary,
+      'items': allItems,
+    };
   }
 
   /// Get inventory stats (global - for admins only)
@@ -109,7 +150,7 @@ class InventoryService {
   }
 
   /// Get inventory stats for specific stores (for non-admin managers)
-  /// Calculates stats by fetching inventory from each assigned store IN PARALLEL
+  /// Uses summary data from server (calculated from ALL items, not just first page)
   static Future<Map<String, dynamic>> getStatsForStores(List<String> vendorIds) async {
     if (vendorIds.isEmpty) {
       return {
@@ -121,12 +162,12 @@ class InventoryService {
 
     try {
       int totalInventoryRecords = 0;
-      Set<String> uniqueMedicineIds = {};
 
       // Fetch inventory summary for ALL stores in PARALLEL (not sequential!)
+      // Only fetches first page but summary contains total counts from ALL items
       final futures = vendorIds.map((vendorId) async {
         try {
-          final inventoryData = await getStoreInventory(vendorId);
+          final inventoryData = await getStoreInventory(vendorId, page: 0, size: 1);
           return {'vendorId': vendorId, 'data': inventoryData, 'success': true};
         } catch (e) {
           print('Error fetching stats for store $vendorId: $e');
@@ -137,26 +178,20 @@ class InventoryService {
       // Wait for all to complete (with individual error handling)
       final results = await Future.wait(futures);
 
-      // Process results
+      // Process results - use summary which has totals calculated from ALL items server-side
       for (final result in results) {
         if (result['success'] == true && result['data'] != null) {
           final data = result['data'] as Map<String, dynamic>;
           final summary = data['summary'] as InventorySummary?;
-          final items = data['items'] as List<StoreInventoryItem>?;
           
           if (summary != null) {
             totalInventoryRecords += summary.totalItems;
-          }
-          if (items != null) {
-            for (final item in items) {
-              uniqueMedicineIds.add(item.medicineId);
-            }
           }
         }
       }
 
       return {
-        'totalMedicines': uniqueMedicineIds.length,
+        'totalMedicines': totalInventoryRecords, // Using total items as proxy for unique medicines
         'totalInventory': totalInventoryRecords,
         'totalStores': vendorIds.length,
       };

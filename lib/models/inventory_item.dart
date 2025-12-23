@@ -263,3 +263,32 @@ class UploadError {
   }
 }
 
+class PaginationInfo {
+  final int page;
+  final int size;
+  final int totalItems;
+  final int totalPages;
+  final bool hasNext;
+  final bool hasPrevious;
+
+  PaginationInfo({
+    required this.page,
+    required this.size,
+    required this.totalItems,
+    required this.totalPages,
+    required this.hasNext,
+    required this.hasPrevious,
+  });
+
+  factory PaginationInfo.fromJson(Map<String, dynamic> json) {
+    return PaginationInfo(
+      page: json['page'] as int? ?? 0,
+      size: json['size'] as int? ?? 50,
+      totalItems: json['totalItems'] as int? ?? 0,
+      totalPages: json['totalPages'] as int? ?? 1,
+      hasNext: json['hasNext'] as bool? ?? false,
+      hasPrevious: json['hasPrevious'] as bool? ?? false,
+    );
+  }
+}
+
