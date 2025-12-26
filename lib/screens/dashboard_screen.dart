@@ -8,6 +8,7 @@ import 'upload_screen.dart';
 import 'inventory_view_screen.dart';
 import 'login_screen.dart';
 import 'bulk_delete_screen.dart';
+import 'invoice_management_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -922,10 +923,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 'Remove Items',
                 'Remove items from store inventory',
                 Icons.remove_circle_outline,
-                const Color(0xFF00897B), // Teal - less aggressive
+                const Color(0xFF00897B),
                 () => _navigateToBulkDelete(),
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
+                'Manage Invoices',
+                'Upload and manage pharmacy invoices for orders',
+                Icons.receipt_long,
+                const Color(0xFFFF6F00),
+                () => _navigateToInvoices(),
+              ),
+            ),
+            const Expanded(child: SizedBox()), // Empty space for alignment
+            const Expanded(child: SizedBox()), // Empty space for alignment
           ],
         ),
       ],
@@ -1203,6 +1220,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => BulkDeleteScreen(
+          stores: _filteredStores,
+          preselectedStore: preselectedStore,
+        ),
+      ),
+    ).then((_) => _loadData());
+  }
+
+  void _navigateToInvoices({Store? preselectedStore}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => InvoiceManagementScreen(
           stores: _filteredStores,
           preselectedStore: preselectedStore,
         ),
