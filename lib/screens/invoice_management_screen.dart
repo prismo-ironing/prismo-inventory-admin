@@ -589,7 +589,7 @@ class _InvoiceManagementScreenState extends ConsumerState<InvoiceManagementScree
     final invoiceAmountController = TextEditingController(
       text: order.totalAmount.toStringAsFixed(2),
     );
-    DateTime? selectedDate = DateTime.now();
+    DateTime? selectedDate = order.createdAt;
     Uint8List? selectedFileBytes;
     String? selectedFileName;      // Display name (with size)
     String? originalFileName;      // Original name (for upload/validation)
@@ -775,7 +775,7 @@ class _InvoiceManagementScreenState extends ConsumerState<InvoiceManagementScree
                   ),
                   const SizedBox(height: 16),
 
-                  // Invoice date - defaults to today
+                  // Invoice date - defaults to order date
                   Text(
                     'Invoice Date',
                     style: GoogleFonts.inter(
