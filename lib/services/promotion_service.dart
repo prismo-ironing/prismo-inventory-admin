@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/promotion_item.dart';
+import '../models/promotion.dart';
 
 class PromotionService {
   static const Duration _timeout = Duration(seconds: 10);
@@ -95,6 +96,62 @@ class PromotionService {
       failedPromotions: failedPromotions,
       errors: allErrors,
     );
+  }
+
+  /// Get all promotions for a vendor
+  static Future<List<Promotion>> getPromotionsForVendor(String vendorId) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('${ApiConfig.baseUrl}/promotions/vendor/$vendorId'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = json.decode(response.body);
+        final promotions = jsonList
+            .map((json) => Promotion.fromJson(json as Map<String, dynamic>))
+            .toList();
+        
+        print('Found ${promotions.length} promotions for vendor $vendorId');
+        return promotions;
+      } else {
+        print('Failed to fetch promotions. Status: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('Error fetching promotions: $e');
+      return [];
+    }
+  }
+
+  /// Get active promotions for a vendor
+  static Future<List<Promotion>> getActivePromotionsForVendor(String vendorId) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('${ApiConfig.baseUrl}/promotions/vendor/$vendorId/active'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = json.decode(response.body);
+        final promotions = jsonList
+            .map((json) => Promotion.fromJson(json as Map<String, dynamic>))
+            .toList();
+        
+        print('Found ${promotions.length} active promotions for vendor $vendorId');
+        return promotions;
+      } else {
+        print('Failed to fetch active promotions. Status: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('Error fetching active promotions: $e');
+      return [];
+    }
   }
 }
 

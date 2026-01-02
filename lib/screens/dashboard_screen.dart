@@ -10,6 +10,7 @@ import 'login_screen.dart';
 import 'bulk_delete_screen.dart';
 import 'invoice_management_screen.dart';
 import 'promotion_upload_screen.dart';
+import 'promotions_view_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -1060,7 +1061,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       3: FixedColumnWidth(70), // Active
                       4: FixedColumnWidth(70), // Expired
                       5: FixedColumnWidth(90), // Low Stock
-                      6: FixedColumnWidth(100), // Actions
+                      6: FixedColumnWidth(140), // Actions (wider for 3 buttons)
                     },
                     defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     children: [
@@ -1192,6 +1193,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.local_offer, size: 20),
+                                onPressed: () => _navigateToPromotionsView(store),
+                                tooltip: 'View Promotions',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
                             ],
                           ),
                         ],
@@ -1266,6 +1275,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => InventoryViewScreen(store: store),
+      ),
+    );
+  }
+
+  void _navigateToPromotionsView(Store store) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PromotionsViewScreen(store: store),
       ),
     );
   }
