@@ -83,7 +83,7 @@ class _PromotionUploadScreenState extends State<PromotionUploadScreen> {
   }
 
   Future<void> _uploadPromotions() async {
-    if (_selectedStore == null || _parsedItems == null) return;
+    if (_parsedItems == null) return;
 
     setState(() {
       _isUploading = true;
@@ -95,8 +95,10 @@ class _PromotionUploadScreenState extends State<PromotionUploadScreen> {
     });
 
     try {
+      // vendorId is optional - backend ignores it (promotions are vendor-agnostic)
+      // Promotions apply to all vendors/platform-wide
       final response = await PromotionService.uploadPromotions(
-        _selectedStore!.id,
+        _selectedStore?.id, // Optional - kept for backward compatibility
         _parsedItems!,
         onProgress: (completed, total, currentBatch, totalBatches) {
           if (mounted) {
@@ -142,13 +144,13 @@ class _PromotionUploadScreenState extends State<PromotionUploadScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Step 1: Select Store
+            // Step 1: Select Store (Optional - promotions are vendor-agnostic)
             _buildStepCard(
               step: 1,
-              title: 'Select Store',
-              subtitle: 'Choose the store for promotion upload',
+              title: 'Select Store (Optional)',
+              subtitle: 'Promotions apply to all vendors. Store selection is optional.',
               icon: Icons.store,
-              isCompleted: _selectedStore != null,
+              isCompleted: true, // Always completed since it's optional
               child: _buildStoreSelector(),
             ),
             const SizedBox(height: 24),
@@ -178,11 +180,13 @@ class _PromotionUploadScreenState extends State<PromotionUploadScreen> {
             ],
 
             // Step 4: Upload
-            if (_parsedItems != null && _selectedStore != null) ...[
+            if (_parsedItems != null) ...[
               _buildStepCard(
                 step: 4,
                 title: 'Confirm Upload',
-                subtitle: 'Upload promotions to ${_selectedStore!.name}',
+                subtitle: _selectedStore != null 
+                    ? 'Upload platform-wide promotions (selected store: ${_selectedStore!.name})'
+                    : 'Upload platform-wide promotions (applies to all vendors)',
                 icon: Icons.cloud_upload,
                 isCompleted: _uploadResponse != null && _uploadResponse!.success,
                 child: _buildUploadSection(),
@@ -295,26 +299,62 @@ class _PromotionUploadScreenState extends State<PromotionUploadScreen> {
   }
 
   Widget _buildStoreSelector() {
-    return DropdownButtonFormField<Store>(
-      value: _selectedStore,
-      decoration: InputDecoration(
-        labelText: 'Select Store',
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<Store>(
+          value: _selectedStore,
+          decoration: InputDecoration(
+            labelText: 'Select Store (Optional)',
+            helperText: 'Promotions are vendor-agnostic and apply to all vendors',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            prefixIcon: const Icon(Icons.store),
+          ),
+          items: [
+            const DropdownMenuItem<Store>(
+              value: null,
+              child: Text('None (Platform-wide)'),
+            ),
+            ...widget.stores.map((store) {
+              return DropdownMenuItem(
+                value: store,
+                child: Text('${store.name} (${store.id})'),
+              );
+            }),
+          ],
+          onChanged: (store) {
+            setState(() {
+              _selectedStore = store;
+            });
+          },
         ),
-        prefixIcon: const Icon(Icons.store),
-      ),
-      items: widget.stores.map((store) {
-        return DropdownMenuItem(
-          value: store,
-          child: Text('${store.name} (${store.id})'),
-        );
-      }).toList(),
-      onChanged: (store) {
-        setState(() {
-          _selectedStore = store;
-        });
-      },
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Note: Promotions are platform-wide and apply to all vendors regardless of store selection.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -559,7 +599,9 @@ class _PromotionUploadScreenState extends State<PromotionUploadScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${_parsedItems!.length} promotions will be uploaded to ${_selectedStore!.name}',
+                        _selectedStore != null
+                            ? '${_parsedItems!.length} platform-wide promotions will be uploaded (selected store: ${_selectedStore!.name})'
+                            : '${_parsedItems!.length} platform-wide promotions will be uploaded (applies to all vendors)',
                         style: TextStyle(color: Colors.blue.shade700),
                       ),
                     ],

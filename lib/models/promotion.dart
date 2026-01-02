@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// Promotion model matching backend API structure
 class Promotion {
   final String id;
-  final String vendorId;
+  final String? vendorId; // Optional - promotions are vendor-agnostic
   final String promotionName;
   final String promotionType; // DISCOUNT_PERCENTAGE, FLAT_DISCOUNT, etc.
   final double? discountValue;
@@ -26,7 +26,7 @@ class Promotion {
 
   Promotion({
     required this.id,
-    required this.vendorId,
+    this.vendorId,
     required this.promotionName,
     required this.promotionType,
     this.discountValue,
@@ -51,7 +51,7 @@ class Promotion {
   factory Promotion.fromJson(Map<String, dynamic> json) {
     return Promotion(
       id: json['id'] ?? '',
-      vendorId: json['vendorId'] ?? '',
+      vendorId: json['vendorId'], // May be null - promotions are vendor-agnostic
       promotionName: json['promotionName'] ?? '',
       promotionType: json['promotionType'] ?? '',
       discountValue: json['discountValue'] != null 

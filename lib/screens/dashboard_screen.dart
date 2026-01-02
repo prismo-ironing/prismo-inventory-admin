@@ -947,13 +947,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             Expanded(
               child: _buildActionCard(
                 'Upload Promotions',
-                'Import Excel sheet to create store promotions',
+                'Import Excel sheet to create platform-wide promotions',
                 Icons.local_offer,
                 const Color(0xFF9C27B0),
                 () => _navigateToPromotionUpload(),
               ),
             ),
-            const Expanded(child: SizedBox()), // Empty space for alignment
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionCard(
+                'View All Promotions',
+                'View and manage all platform-wide promotions',
+                Icons.view_list,
+                const Color(0xFF7B1FA2),
+                () => _navigateToPromotionsView(null), // null = view all promotions
+              ),
+            ),
           ],
         ),
       ],
@@ -1061,7 +1070,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       3: FixedColumnWidth(70), // Active
                       4: FixedColumnWidth(70), // Expired
                       5: FixedColumnWidth(90), // Low Stock
-                      6: FixedColumnWidth(140), // Actions (wider for 3 buttons)
+                      6: FixedColumnWidth(100), // Actions (2 buttons: upload and view)
                     },
                     defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     children: [
@@ -1193,14 +1202,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(Icons.local_offer, size: 20),
-                                onPressed: () => _navigateToPromotionsView(store),
-                                tooltip: 'View Promotions',
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                              ),
                             ],
                           ),
                         ],
@@ -1279,11 +1280,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  void _navigateToPromotionsView(Store store) {
+  void _navigateToPromotionsView(Store? store) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PromotionsViewScreen(store: store),
+        builder: (context) => PromotionsViewScreen(store: store), // Optional - promotions are vendor-agnostic
       ),
     );
   }

@@ -9,10 +9,11 @@ class PromotionService {
   static const Duration _uploadTimeout = Duration(seconds: 180); // 3 min timeout for large batches
 
   /// Upload promotions from parsed Excel data with batching for large files
-  /// Uses promotion create endpoint with batching similar to inventory upload
+  /// Uses vendor-agnostic promotion create endpoint (promotions apply to all vendors)
   /// [onProgress] callback receives (completed, total, currentBatch, totalBatches)
+  /// vendorId parameter kept for backward compatibility but ignored by backend
   static Future<PromotionUploadResponse> uploadPromotions(
-    String vendorId,
+    String? vendorId, // Optional - promotions are vendor-agnostic
     List<PromotionItem> items, {
     void Function(int completed, int total, int currentBatch, int totalBatches)? onProgress,
   }) async {
@@ -21,7 +22,7 @@ class PromotionService {
     final int totalItems = items.length;
     final int totalBatches = (totalItems / batchSize).ceil();
 
-    print('Uploading $totalItems promotions in $totalBatches batches to vendor $vendorId');
+    print('Uploading $totalItems promotions in $totalBatches batches (vendor-agnostic - applies to all vendors)');
 
     // Aggregate results across batches
     int successfulPromotions = 0;
@@ -42,10 +43,10 @@ class PromotionService {
         try {
           final requestBody = json.encode(item.toJson());
 
-          // Call promotion create endpoint
+          // Call vendor-agnostic promotion create endpoint
           final response = await http
               .post(
-                Uri.parse(ApiConfig.createPromotionUrl(vendorId)),
+                Uri.parse(ApiConfig.createPromotionUrl()), // Vendor-agnostic endpoint
                 headers: {'Content-Type': 'application/json'},
                 body: requestBody,
               )
@@ -98,12 +99,14 @@ class PromotionService {
     );
   }
 
-  /// Get all promotions for a vendor
-  static Future<List<Promotion>> getPromotionsForVendor(String vendorId) async {
+  /// Get all promotions (vendor-agnostic - applies to all vendors)
+  /// vendorId parameter kept for backward compatibility but ignored by backend
+  static Future<List<Promotion>> getPromotionsForVendor(String? vendorId) async {
     try {
+      // Use vendor-agnostic endpoint - promotions apply to all vendors
       final response = await http
           .get(
-            Uri.parse('${ApiConfig.baseUrl}/promotions/vendor/$vendorId'),
+            Uri.parse('${ApiConfig.baseUrl}/promotions'),
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(_timeout);
@@ -114,7 +117,7 @@ class PromotionService {
             .map((json) => Promotion.fromJson(json as Map<String, dynamic>))
             .toList();
         
-        print('Found ${promotions.length} promotions for vendor $vendorId');
+        print('Found ${promotions.length} promotions (vendor-agnostic)');
         return promotions;
       } else {
         print('Failed to fetch promotions. Status: ${response.statusCode}');
@@ -126,12 +129,14 @@ class PromotionService {
     }
   }
 
-  /// Get active promotions for a vendor
-  static Future<List<Promotion>> getActivePromotionsForVendor(String vendorId) async {
+  /// Get active promotions (vendor-agnostic - applies to all vendors)
+  /// vendorId parameter kept for backward compatibility but ignored by backend
+  static Future<List<Promotion>> getActivePromotionsForVendor(String? vendorId) async {
     try {
+      // Use vendor-agnostic endpoint - promotions apply to all vendors
       final response = await http
           .get(
-            Uri.parse('${ApiConfig.baseUrl}/promotions/vendor/$vendorId/active'),
+            Uri.parse('${ApiConfig.baseUrl}/promotions/active'),
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(_timeout);
@@ -142,7 +147,7 @@ class PromotionService {
             .map((json) => Promotion.fromJson(json as Map<String, dynamic>))
             .toList();
         
-        print('Found ${promotions.length} active promotions for vendor $vendorId');
+        print('Found ${promotions.length} active promotions (vendor-agnostic)');
         return promotions;
       } else {
         print('Failed to fetch active promotions. Status: ${response.statusCode}');
@@ -154,12 +159,14 @@ class PromotionService {
     }
   }
 
-  /// Deactivate a promotion
-  static Future<bool> deactivatePromotion(String vendorId, String promotionId) async {
+  /// Deactivate a promotion (vendor-agnostic)
+  /// vendorId parameter kept for backward compatibility but ignored by backend
+  static Future<bool> deactivatePromotion(String? vendorId, String promotionId) async {
     try {
+      // Use vendor-agnostic endpoint
       final response = await http
           .post(
-            Uri.parse('${ApiConfig.baseUrl}/promotions/vendor/$vendorId/$promotionId/deactivate'),
+            Uri.parse('${ApiConfig.baseUrl}/promotions/$promotionId/deactivate'),
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(_timeout);
@@ -177,12 +184,14 @@ class PromotionService {
     }
   }
 
-  /// Activate a promotion
-  static Future<bool> activatePromotion(String vendorId, String promotionId) async {
+  /// Activate a promotion (vendor-agnostic)
+  /// vendorId parameter kept for backward compatibility but ignored by backend
+  static Future<bool> activatePromotion(String? vendorId, String promotionId) async {
     try {
+      // Use vendor-agnostic endpoint
       final response = await http
           .post(
-            Uri.parse('${ApiConfig.baseUrl}/promotions/vendor/$vendorId/$promotionId/activate'),
+            Uri.parse('${ApiConfig.baseUrl}/promotions/$promotionId/activate'),
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(_timeout);

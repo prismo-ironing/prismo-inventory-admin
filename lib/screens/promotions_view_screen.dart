@@ -6,9 +6,9 @@ import '../services/promotion_service.dart';
 import 'package:intl/intl.dart';
 
 class PromotionsViewScreen extends StatefulWidget {
-  final Store store;
+  final Store? store; // Optional - promotions are vendor-agnostic (platform-wide)
 
-  const PromotionsViewScreen({super.key, required this.store});
+  const PromotionsViewScreen({super.key, this.store});
 
   @override
   State<PromotionsViewScreen> createState() => _PromotionsViewScreenState();
@@ -35,7 +35,9 @@ class _PromotionsViewScreenState extends State<PromotionsViewScreen> {
     });
 
     try {
-      final promotions = await PromotionService.getPromotionsForVendor(widget.store.id);
+      // Fetch all promotions (vendor-agnostic - applies to all vendors)
+      // store.id is optional and ignored by backend
+      final promotions = await PromotionService.getPromotionsForVendor(widget.store?.id);
       
       setState(() {
         _promotions = promotions;
@@ -82,7 +84,9 @@ class _PromotionsViewScreenState extends State<PromotionsViewScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: Text('Promotions - ${widget.store.name}'),
+        title: Text(widget.store != null 
+            ? 'Promotions - ${widget.store!.name}' 
+            : 'Platform Promotions'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -305,7 +309,7 @@ class _PromotionsViewScreenState extends State<PromotionsViewScreen> {
           Text(
             _searchQuery.isNotEmpty || _filterStatus != 'all'
                 ? 'Try adjusting your filters'
-                : 'No promotions have been created for this store',
+                : 'No platform promotions have been created yet',
             style: GoogleFonts.inter(
               fontSize: 14,
               color: Colors.grey.shade500,
@@ -585,8 +589,9 @@ class _PromotionsViewScreenState extends State<PromotionsViewScreen> {
         );
       }
 
+      // vendorId is optional - backend ignores it (promotions are vendor-agnostic)
       final success = await PromotionService.deactivatePromotion(
-        widget.store.id,
+        widget.store?.id,
         promotion.id,
       );
 
@@ -711,8 +716,9 @@ class _PromotionsViewScreenState extends State<PromotionsViewScreen> {
         );
       }
 
+      // vendorId is optional - backend ignores it (promotions are vendor-agnostic)
       final success = await PromotionService.activatePromotion(
-        widget.store.id,
+        widget.store?.id,
         promotion.id,
       );
 
