@@ -103,5 +103,13 @@ class ApiConfig {
   
   // Search medicines
   static String searchMedicinesUrl(String query) => '$medicinesUrl/search?query=$query';
+  
+  // =====================================================
+  // PROMOTION ENDPOINTS
+  // =====================================================
+  
+  // Create promotion endpoint
+  static String createPromotionUrl(String vendorId) => 
+      '$baseUrl/promotions/vendor/$vendorId';
 }
 

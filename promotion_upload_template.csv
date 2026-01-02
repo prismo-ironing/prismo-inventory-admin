@@ -1,0 +1,9 @@
+Promotion Name,Promotion Type,Discount Value,Min Order Amount,Max Discount Amount,Start Date,End Date,Applicable On,Usage Limit Per User,Total Usage Limit,Promo Code,Description,Banner Image URL,Terms Conditions,Is Active,Created By,Medicine IDs,Categories
+Summer Sale 2024,DISCOUNT_PERCENTAGE,15,500,1000,2024-06-01,2024-08-31,ALL_ITEMS,1,1000,SUMMER15,Get 15% off on all items this summer,,Valid on orders above ₹500. Maximum discount ₹1000.,true,Admin,,
+New Customer Offer,FLAT_DISCOUNT,100,0,100,2024-06-01,2024-12-31,FIRST_ORDER_ONLY,1,5000,NEW100,Flat ₹100 off for new customers,,First order only. Valid for new customers.,true,Admin,,
+Medicine Category Discount,DISCOUNT_PERCENTAGE,20,300,500,2024-06-01,2024-07-31,SPECIFIC_CATEGORIES,2,2000,,20% off on selected categories,,Valid on orders above ₹300. Maximum discount ₹500.,true,Admin,,"Vitamins, Supplements"
+Free Delivery Weekend,FREE_DELIVERY,0,200,0,2024-06-01,2024-06-30,ALL_ITEMS,3,10000,WEEKEND,Free delivery on weekends,,Minimum order ₹200. Valid on weekends only.,true,Admin,,
+Cashback Offer,CASHBACK,50,1000,50,2024-06-01,2024-08-31,ALL_ITEMS,1,2000,CASH50,Get ₹50 cashback on orders above ₹1000,,Minimum order ₹1000. Cashback credited to wallet.,true,Admin,,
+Specific Medicine Discount,DISCOUNT_PERCENTAGE,25,0,250,2024-06-01,2024-07-15,SPECIFIC_MEDICINES,1,500,MED25,25% off on selected medicines,,Valid on specific medicines only. Maximum discount ₹250.,true,Admin,"med_123,med_456,med_789",
+Buy One Get One,BOGO,0,500,0,2024-06-01,2024-06-30,SPECIFIC_CATEGORIES,1,1000,BOGO500,Buy one get one on selected items,,Minimum order ₹500. Valid on selected categories.,true,Admin,,"Personal Care, Skincare"
+

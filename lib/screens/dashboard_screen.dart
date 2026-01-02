@@ -9,6 +9,7 @@ import 'inventory_view_screen.dart';
 import 'login_screen.dart';
 import 'bulk_delete_screen.dart';
 import 'invoice_management_screen.dart';
+import 'promotion_upload_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -941,7 +942,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 () => _navigateToInvoices(),
               ),
             ),
-            const Expanded(child: SizedBox()), // Empty space for alignment
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionCard(
+                'Upload Promotions',
+                'Import Excel sheet to create store promotions',
+                Icons.local_offer,
+                const Color(0xFF9C27B0),
+                () => _navigateToPromotionUpload(),
+              ),
+            ),
             const Expanded(child: SizedBox()), // Empty space for alignment
           ],
         ),
@@ -1232,6 +1242,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => InvoiceManagementScreen(
+          stores: _filteredStores,
+          preselectedStore: preselectedStore,
+        ),
+      ),
+    ).then((_) => _loadData());
+  }
+
+  void _navigateToPromotionUpload({Store? preselectedStore}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PromotionUploadScreen(
           stores: _filteredStores,
           preselectedStore: preselectedStore,
         ),
