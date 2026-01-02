@@ -153,5 +153,51 @@ class PromotionService {
       return [];
     }
   }
+
+  /// Deactivate a promotion
+  static Future<bool> deactivatePromotion(String vendorId, String promotionId) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/promotions/vendor/$vendorId/$promotionId/deactivate'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        print('Promotion $promotionId deactivated successfully');
+        return true;
+      } else {
+        print('Failed to deactivate promotion. Status: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error deactivating promotion: $e');
+      return false;
+    }
+  }
+
+  /// Activate a promotion
+  static Future<bool> activatePromotion(String vendorId, String promotionId) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/promotions/vendor/$vendorId/$promotionId/activate'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        print('Promotion $promotionId activated successfully');
+        return true;
+      } else {
+        print('Failed to activate promotion. Status: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error activating promotion: $e');
+      return false;
+    }
+  }
 }
 
