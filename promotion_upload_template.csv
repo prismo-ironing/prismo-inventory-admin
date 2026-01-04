@@ -6,4 +6,3 @@ Free Delivery Weekend,FREE_DELIVERY,0,200,0,2024-06-01,2024-06-30,ALL_ITEMS,3,10
 Cashback Offer,CASHBACK,50,1000,50,2024-06-01,2024-08-31,ALL_ITEMS,1,2000,CASH50,Get ₹50 cashback on orders above ₹1000,,Minimum order ₹1000. Cashback credited to wallet.,true,Admin,,
 Specific Medicine Discount,DISCOUNT_PERCENTAGE,25,0,250,2024-06-01,2024-07-15,SPECIFIC_MEDICINES,1,500,MED25,25% off on selected medicines,,Valid on specific medicines only. Maximum discount ₹250.,true,Admin,"med_123,med_456,med_789",
 Buy One Get One,BOGO,0,500,0,2024-06-01,2024-06-30,SPECIFIC_CATEGORIES,1,1000,BOGO500,Buy one get one on selected items,,Minimum order ₹500. Valid on selected categories.,true,Admin,,"Personal Care, Skincare"
-

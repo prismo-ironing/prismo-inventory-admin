@@ -112,6 +112,6 @@ class ApiConfig {
   /// Create promotion URL (vendor-agnostic - promotions apply to all vendors)
   /// vendorId parameter kept for backward compatibility but ignored by backend
   static String createPromotionUrl([String? vendorId]) => 
-      '$baseUrl/promotions'; // Vendor-agnostic endpoint
+      '$baseUrl/promotions/'; // Vendor-agnostic endpoint (with trailing slash to match backend @PostMapping)
 }
 
